@@ -13,6 +13,12 @@
   <!-- Three.js r128 ve OrbitControls -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- Atölye: taşıma tutamacı, 3D dosya yükleyiciler ve GLB dışa aktarma -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -246,6 +252,12 @@
           <span id="label-sonar">Sensör Alanları</span>
         </button>
 
+        <!-- Atölye -->
+        <button id="btn-workshop" type="button" class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50">
+          <svg class="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z"/></svg>
+          <span>Atölye</span>
+        </button>
+
         <!-- Adım Adım Montaj -->
         <button id="btn-assembly" type="button" class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50">
           <svg class="w-4 h-4 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>
@@ -278,6 +290,73 @@
       </div>
     </div>
   </footer>
+
+  <!-- Atölye paneli -->
+  <div id="ws-panel" class="glass-panel fixed z-20 left-4 right-4 sm:right-auto sm:w-80 rounded-2xl p-4 hidden overflow-y-auto" style="top:112px; max-height:calc(100vh - 230px)">
+    <div class="flex items-start justify-between gap-2">
+      <div>
+        <div class="text-[11px] font-semibold uppercase tracking-wider text-orange-600">Atölye</div>
+        <h2 class="text-sm sm:text-base font-bold text-slate-800 mt-0.5">Parçaları elle birleştir</h2>
+      </div>
+      <button id="ws-close" type="button" class="flex-none w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 grid place-items-center" aria-label="Atölyeyi kapat">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="text-xs text-slate-600 mt-1.5">Bir parçaya tıklayın, renkli oklarla taşıyın. Kısayollar: <b>W</b> taşı, <b>E</b> döndür, <b>R</b> ölçekle.</p>
+    <div class="mt-2 text-xs"><span class="text-slate-400">Seçili:</span> <b id="ws-selected" class="text-slate-800">Bir parçaya tıklayın</b></div>
+    <div class="flex bg-slate-100/90 p-1 rounded-xl gap-1 mt-2" role="group" aria-label="Düzenleme modu">
+      <button type="button" data-mode="translate" class="ws-mode flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-white shadow-sm text-slate-900">Taşı</button>
+      <button type="button" data-mode="rotate" class="ws-mode flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600">Döndür</button>
+      <button type="button" data-mode="scale" class="ws-mode flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600">Ölçekle</button>
+    </div>
+    <div class="flex gap-1.5 mt-2">
+      <button id="ws-snap" type="button" class="btn-pill flex-1 px-2 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Yapış (0,5 cm / 15°)</button>
+      <button id="ws-reset-one" type="button" class="btn-pill flex-1 px-2 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 disabled:opacity-40" disabled>Seçiliyi sıfırla</button>
+    </div>
+    <button id="ws-reset-all" type="button" class="btn-pill w-full mt-1.5 px-2 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Tüm parçaları yerine koy</button>
+
+    <div class="mt-4 pt-3 border-t border-slate-200/80">
+      <div class="text-xs font-bold text-slate-800">Kendi 3D parçanı ekle</div>
+      <p class="text-[11px] text-slate-500 mt-0.5">GLB, STL ya da OBJ (ör. Meshy, Tripo, Thingiverse, Printables). Bu tarayıcıda saklanır.</p>
+      <div class="grid grid-cols-2 gap-1.5 mt-2">
+        <label class="text-[11px] text-slate-500">Ölçü birimi
+          <select id="ws-unit" class="mt-0.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800">
+            <option value="auto">Otomatik</option><option value="mm">Milimetre (STL/CAD)</option><option value="cm">Santimetre</option><option value="m">Metre</option>
+          </select>
+        </label>
+        <label class="flex items-end gap-1.5 text-[11px] text-slate-600 pb-1.5"><input id="ws-zup" type="checkbox" checked class="w-4 h-4"> STL: Z yukarı</label>
+      </div>
+      <label class="btn-pill mt-2 flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-xl text-xs font-semibold bg-orange-500 text-white cursor-pointer">
+        ＋ 3D dosya seç
+        <input id="ws-file" type="file" accept=".glb,.gltf,.stl,.obj" multiple class="hidden">
+      </label>
+      <ul id="ws-custom-list" class="mt-2 divide-y divide-slate-100"></ul>
+    </div>
+
+    <div class="mt-3 pt-3 border-t border-slate-200/80 grid grid-cols-2 gap-1.5">
+      <button id="btn-screenshot" type="button" class="btn-pill px-2 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Ekran görüntüsü</button>
+      <button id="btn-export-glb" type="button" class="btn-pill px-2 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">GLB indir</button>
+    </div>
+  </div>
+
+  <!-- Dışa aktarma penceresi -->
+  <div id="export-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="export-title">
+    <div class="max-w-2xl mx-auto bg-white rounded-2xl p-4 sm:p-6 shadow-2xl">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <h2 id="export-title" class="text-base font-bold text-slate-800"></h2>
+        <button id="export-close" type="button" class="w-10 h-10 rounded-xl text-slate-500 hover:bg-slate-100 grid place-items-center" aria-label="Kapat">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div id="export-preview"></div>
+      <div class="flex flex-wrap items-center gap-3 mt-4">
+        <a id="export-link" class="btn-pill inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white">İndir</a>
+        <span id="export-note" class="text-xs text-slate-500"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite" class="hidden fixed z-50 left-1/2 -translate-x-1/2 top-4 glass-panel rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-800 max-w-[90vw]"></div>
 
   <!-- Montaj paneli -->
   <div id="asm-panel" class="glass-panel fixed z-20 left-4 right-4 sm:right-auto sm:w-80 rounded-2xl p-4 hidden" style="top:112px">
@@ -323,6 +402,7 @@
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
       </div>
+      <input id="library-search" type="search" placeholder="Parça ara (ör. sensör, motor, Mega)…" class="w-full mb-3 rounded-xl border border-slate-200 px-3 py-2.5 text-base sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400">
       <div id="library-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></div>
     </div>
   </div>
@@ -637,6 +717,7 @@
           if (child.isMesh) {
             child.userData.partLabel = label;
             child.userData.partKey = key;
+            child.userData.partRoot = object3D;
             interactiveMeshes.push(child);
             (partMeshesByKey[key] = partMeshesByKey[key] || []).push(child);
           }
@@ -1325,10 +1406,14 @@
       sonarConeGeom.rotateX(-Math.PI / 2);
       sonarConeGeom.translate(0, 0, 20);
 
+      // Rapordaki bağlantı: S1 ön, S2 sol ön, S3 sol arka, S4 arka, S5 sağ ön, S6 sağ arka
+      const SENSOR_PINS = { 'Ön': 'S1 Ön (TRIG D22 / ECHO D23)', 'Sol ön': 'S2 Sol ön (D24 / D25)', 'Sol arka': 'S3 Sol arka (D26 / D27)',
+        'Arka': 'S4 Arka (D28 / D29)', 'Sağ ön': 'S5 Sağ ön (D30 / D31)', 'Sağ arka': 'S6 Sağ arka (D32 / D33)' };
       function createSonar(name, x, z, yaw, withServo) {
         const root = new THREE.Group();
         root.position.set(x, TOP_Y, z);
         root.rotation.y = yaw;
+        root.userData.unitRoot = true;   // atölyede sensör braketiyle birlikte taşınır
         let g = root;
         let pan = null;
         if (withServo) {
@@ -1363,7 +1448,7 @@
           sensor.add(cap);
         });
         addBox(sensor, 0.9, 0.35, 0.3, materials.silverMetal, 0, 2.0, 1.0);
-        tagPart(sensor, 'HC-SR04 Ultrasonik Sensör — ' + name, 'hcsr04');
+        tagPart(sensor, 'HC-SR04 Ultrasonik Sensör — ' + SENSOR_PINS[name], 'hcsr04');
         g.add(sensor);
 
         const cone = new THREE.Mesh(sonarConeGeom, materials.sonarCone);
@@ -1403,15 +1488,15 @@
 
       function buildWiring() {
         // Motorlar: shield klemensleri (M1–M4) → üst plakadaki orta delik → motorlar
-        // M1 sağ ön, M2 sağ arka (−X), M3 sol ön, M4 sol arka (+X)
+        // M1 sol ön, M2 sol arka (+X), M3 sağ ön, M4 sağ arka (−X) — rapordaki bağlantı
         [1, -1].forEach((sx) => {
           [['front', -3.6], ['rear', -5.1]].forEach(([which, zt], mi) => {
             [[0, materials.wireRed], [1, materials.wireBlack]].forEach(([i, mat]) => {
               const o = i * 0.22;
               const hx = sx * (0.25 + (mi * 2 + i) * 0.12);
-              // Sağ motorlar M1/M2 (arkadaki klemens), sol motorlar M3/M4 (öndeki klemens)
-              const blockZ = sx < 0 ? -7.68 : -1.66;
-              const kx = (sx < 0 ? -0.75 : -0.08) + ((mi === 0 ? 0 : 3) + i - 2) * 0.51;
+              // Sol motorlar M1/M2 (arkadaki klemens), sağ motorlar M3/M4 (öndeki klemens)
+              const blockZ = sx > 0 ? -7.68 : -1.66;
+              const kx = (sx > 0 ? -0.75 : -0.08) + ((mi === 0 ? 0 : 3) + i - 2) * 0.51;
               const pts = [
                 [kx, 9.2, blockZ],
                 [kx, 9.9, blockZ + 0.9],
@@ -1936,10 +2021,10 @@
           specs: [['Mikrodenetleyici', 'ATmega2560'], ['Saat', '16 MHz'], ['Dijital pin', '54 (15 PWM)'], ['Analog giriş', '16'], ['Boyut', '101,5 × 53,3 mm']] },
         shield: { cat: 'Güç elektroniği', name: 'L293D Motor Shield (HW-130)', qty: 1, dot: '#1a46b8',
           desc: "Mega'nın üstüne doğrudan takılan sürücü kartı. İki L293D entegresiyle dört DC motoru (M1–M4) ayrı ayrı sürer; 74HC595 kaydırma yazmacı sayesinde az pin kullanır. Motor gücü yeşil EXT_PWR klemensinden gelir",
-          specs: [['Motor kanalı', '4 DC (M1–M4)'], ['Akım', '0,6 A / kanal (1,2 A tepe)'], ['Motor beslemesi', '4,5–25 V'], ['Kullandığı pinler', 'D3–D8, D11, D12'], ['Motorlar', 'M1 sağ ön, M2 sağ arka, M3 sol ön, M4 sol arka']] },
+          specs: [['Motor kanalı', '4 DC (M1–M4)'], ['Akım', '0,6 A / kanal (1,2 A tepe)'], ['Motor beslemesi', '4,5–25 V'], ['Kullandığı pinler', 'D3–D8, D11, D12'], ['Motorlar', 'M1 sol ön, M2 sol arka, M3 sağ ön, M4 sağ arka']] },
         hcsr04: { cat: 'Sensör', name: 'HC-SR04 Ultrasonik Sensör', qty: 6, dot: '#1e4fd8',
           desc: "40 kHz ses darbesi gönderip yankının dönüş süresinden mesafeyi hesaplar. Altı sabit sensör robotun çevresini kollar: önde ve arkada birer, her yanda ikişer. Yan sensörler gövdenin ön ve arka uçlarına yakındır; böylece park yerinin başlangıcını ve sonunu erken görür. Yan yana sensörler birbirinin yankısını karıştırmasın diye sırayla okunur.",
-          specs: [['Konum', 'Ön 1 • Arka 1 • Sol 2 • Sağ 2 (uçlara yakın)'], ['Menzil', '2–400 cm'], ['Ölçüm açısı', '≈ 15°'], ['Besleme', '5 V'], ['Buzzer eşikleri', '15 / 10 / 5 cm'], ['Bağlantı', 'TRIG/ECHO → D22–D33']] },
+          specs: [['Konum', 'Ön 1 • Arka 1 • Sol 2 • Sağ 2 (uçlara yakın)'], ['Menzil', '2–400 cm'], ['Ölçüm açısı', '≈ 15°'], ['Besleme', '5 V'], ['Buzzer eşikleri', '15 / 10 / 5 cm'], ['S1 Ön', 'D22 / D23'], ['S2 Sol ön', 'D24 / D25'], ['S3 Sol arka', 'D26 / D27'], ['S4 Arka', 'D28 / D29'], ['S5 Sağ ön', 'D30 / D31'], ['S6 Sağ arka', 'D32 / D33']] },
         bracket: { cat: 'Bağlantı', name: 'Sensör Braketi', qty: 6, dot: '#2a2d33',
           desc: "Her HC-SR04 sensörünü üst plakaya dik olarak sabitleyen L şeklinde siyah akrilik braket.",
           specs: [['Malzeme', 'Siyah akrilik'], ['Kalınlık', '3 mm']] },
@@ -1954,7 +2039,7 @@
           specs: [['Pil', '8 × AA (1,5 V)'], ['Toplam', '12 V (seri)'], ['Giriş', 'Shield EXT_PWR']] },
         buzzer: { cat: 'Ses', name: 'Aktif Buzzer', qty: 1, dot: '#0b0b0c',
           desc: "İki bacaklı aktif buzzer: kendi osilatörü olduğu için + bacağına HIGH verilince öter, ton üretmek gerekmez. Park sensörü gibi çalışır: engel 15 cm'ye gelince kesik kesik başlar, yaklaştıkça sıklaşır, 5 cm'nin altında sürekli öter.",
-          specs: [['Besleme', '3,3–5 V'], ['Bacaklar', '+ (uzun) → D42, − → GND'], ['15 cm', '≈ 1,4 bip/sn'], ['10 cm', '≈ 2,4 bip/sn'], ['< 5 cm', 'Sürekli']] },
+          specs: [['Besleme', '3,3–5 V'], ['Bacaklar', '+ (uzun) → D34, − → GND'], ['15 cm', '≈ 1,4 bip/sn'], ['10 cm', '≈ 2,4 bip/sn'], ['< 5 cm', 'Sürekli']] },
         chassisTop: { cat: 'Şasi', name: 'Üst Şeffaf Akrilik Plaka', qty: 1, dot: '#bae6fd',
           desc: "Arduino Mega, motor shield, altı sensör ve buzzer'ın oturduğu şeffaf üst kat. Alttaki kabloların görülmesini kolaylaştırır.",
           specs: [['Malzeme', 'Şeffaf akrilik'], ['Kalınlık', '3 mm'], ['Boyut', '≈ 136 × 204 mm']] },
@@ -1969,7 +2054,7 @@
           specs: [['Diş', 'M3'], ['Pul', '6 adet (üst)']] },
         wiring: { cat: 'Bağlantı', name: 'Renkli Jumper Kablolar', qty: '—', dot: '#f97316',
           desc: "Erkek uçlu gökkuşağı jumper kablolar sensörleri ve buzzer'ı Mega'nın çift sıra pin başlığına bağlar. Motor kabloları shield'in yeşil klemenslerine vidalanır. Patlatılmış görünümde gizlenir.",
-          specs: [['Motorlar', 'M1–M4 klemensleri'], ['Sensörler', 'D22–D33'], ['Buzzer', 'D42'], ['Pil', 'EXT_PWR (12 V)']] }
+          specs: [['Motorlar', 'M1 sol ön · M2 sol arka · M3 sağ ön · M4 sağ arka'], ['Sensörler', 'S1–S6 → D22–D33 (TRIG çift, ECHO tek pin)'], ['Buzzer', 'D34'], ['Pil', 'EXT_PWR (12 V)'], ['GND', 'Tüm modüllerde ortak']] }
       };
       const PART_IMG = { arduino: 'img/mega.jpg', shield: 'img/shield.jpg', hcsr04: 'img/hcsr04.jpg', motor: 'img/tt-motor.jpg',
         wheel: 'img/tekerlek.jpg', chassisTop: 'img/sase.jpg', chassisBottom: 'img/sase.jpg', standoff: 'img/sase.jpg', screws: 'img/sase.jpg',
@@ -2050,6 +2135,7 @@
       const btnExplode = document.getElementById('btn-explode');
       const labelExplode = document.getElementById('label-explode');
       btnExplode.addEventListener('click', () => {
+        if (workshop) { toast('Atölye açıkken patlatılmış görünüm kapalı.'); return; }
         isExploded = !isExploded;
         labelExplode.textContent = isExploded ? 'Parçaları Birleştir' : 'Patlatılmış Görünüm';
         btnExplode.classList.toggle('ring-2', isExploded);
@@ -2157,7 +2243,7 @@
         infoCard.style.top = top + 'px';
         infoCard.style.maxHeight = Math.max(160, window.innerHeight - top - bottom) + 'px';
         infoCard.style.overflowY = 'auto';
-        ['asm-panel', 'iso-panel'].forEach((id) => { const el = document.getElementById(id); if (el) el.style.top = top + 'px'; });
+        ['asm-panel', 'iso-panel', 'ws-panel'].forEach((id) => { const el = document.getElementById(id); if (el) el.style.top = top + 'px'; });
       }
 
       let partsOpen = false;
@@ -2223,6 +2309,7 @@
         const moved = Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]);
         downPos = null;
         if (moved > 6) return;
+        if (workshop) { workshopPick(e); return; }
         pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
         pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
         raycaster.setFromCamera(pointer, camera);
@@ -2253,7 +2340,7 @@
       const labelDriveMode = document.getElementById('label-drivemode');
       const btnAuto = document.getElementById('btn-auto');
       const hudSpeed = document.getElementById('hud-speed');
-      const HUD_SHORT = { 'Ön': 'Ön', 'Arka': 'Arka', 'Sol ön': 'Sol ön', 'Sol arka': 'Sol arka', 'Sağ ön': 'Sağ ön', 'Sağ arka': 'Sağ arka' };
+      const HUD_SHORT = { 'Ön': 'S1 Ön', 'Arka': 'S4 Arka', 'Sol ön': 'S2 Sol ön', 'Sol arka': 'S3 Sol arka', 'Sağ ön': 'S5 Sağ ön', 'Sağ arka': 'S6 Sağ arka' };
       // Araçtaki yerlerine göre: üst satır ön, alt satır arka
       const HUD_LAYOUT = ['Sol ön', 'Ön', 'Sağ ön', 'Sol arka', 'Arka', 'Sağ arka'];
       document.getElementById('hud-sonars').innerHTML = HUD_LAYOUT.map((n) => {
@@ -2360,6 +2447,7 @@
           ensureAudio();
           stopAssembly();
           endIsolation(false);
+          closeWorkshop();
           setAutoRotate(false);
           setPartsOpen(false);
           if (isExploded) btnExplode.click();
@@ -2834,9 +2922,9 @@
         { title: '6 HC-SR04 sensör', objs: () => sonarUnits.map((u) => u.group), from: 'out',
           desc: '6 sensörü braketlerine tak: önde 1, arkada 1, her yanda uçlara yakın 2.' },
         { title: 'Buzzer', objs: () => [buzzerGroupRef], from: [0, 8, 0],
-          desc: "Buzzer'ı üst plakanın önüne yerleştir; uzun bacak (+) D42'ye, kısa bacak GND'ye." },
+          desc: "Buzzer'ı üst plakanın önüne yerleştir; uzun bacak (+) D34'e, kısa bacak GND'ye." },
         { title: 'Kablolar', objs: () => [lowerWires, upperWires], from: [0, 0, 0],
-          desc: "Motor kablolarını M1–M4 klemenslerine vidala, sensörleri D22–D33'e, pili EXT_PWR'a bağla. Robot hazır!" }
+          desc: "Motor kablolarını vidala (M1 sol ön, M2 sol arka, M3 sağ ön, M4 sağ arka), sensörleri S1–S6 sırasıyla D22–D33'e, pili EXT_PWR'a bağla. Tüm GND'ler ortak. Robot hazır!" }
       ];
       let asm = null;   // { step, anims: [], playing, playT }
       const asmPanel = document.getElementById('asm-panel');
@@ -2877,6 +2965,7 @@
       }
       function startAssembly() {
         if (driveMode) setDriveMode(false);
+        closeWorkshop();
         closeLibrary();
         if (isExploded) btnExplode.click();
         if (!isTopDeckVisible) btnTopDeck.click();
@@ -3021,6 +3110,7 @@
       function closeLibrary() { libEl.classList.add('hidden'); }
       function isolatePart(key) {
         if (iso) endIsolation(false);
+        closeWorkshop();
         closeLibrary();
         if (isExploded) btnExplode.click();
         const meshes = partInstanceMeshes(key);
@@ -3080,6 +3170,302 @@
       window.addEventListener('load', layoutPanels);
       setTimeout(layoutPanels, 400);
       setTimeout(layoutPanels, 1500);
+
+      // 8h. ATÖLYE: parçaları elle taşı / döndür / ölçekle, kendi 3D dosyanı ekle, ekran görüntüsü, GLB
+      const wsPanel = document.getElementById('ws-panel');
+      let workshop = false;
+      let wsSelected = null;
+      let tcJustDragged = false;
+      const wsEdited = new Set();
+      const customParts = [];   // { id, name, root, ext, data, unit }
+      let tc = null;
+      try {
+        tc = new THREE.TransformControls(camera, renderer.domElement);
+        tc.setSize(0.85);
+        tc.addEventListener('dragging-changed', (e) => {
+          controls.enabled = !e.value;
+          if (!e.value) { tcJustDragged = true; setTimeout(() => { tcJustDragged = false; }, 60); saveCustomTransforms(); }
+        });
+        tc.addEventListener('objectChange', () => { if (wsSelected) wsEdited.add(wsSelected); });
+        scene.add(tc);
+        tc.visible = false;
+        tc.enabled = false;
+      } catch (err) { tc = null; }
+
+      function rememberOrig(o) {
+        if (!o.userData.wsOrig) o.userData.wsOrig = { p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() };
+      }
+      function movableRoot(mesh) {
+        let o = mesh.userData.partRoot || mesh;
+        for (let a = o; a && a !== robotGroup; a = a.parent) if (a.userData.unitRoot) return a;
+        return o;
+      }
+      function wsSelect(o, label) {
+        wsSelected = o;
+        document.getElementById('ws-selected').textContent = o ? label : 'Bir parçaya tıklayın';
+        document.getElementById('ws-reset-one').disabled = !o;
+        if (!tc) return;
+        if (o) { rememberOrig(o); tc.attach(o); tc.visible = true; tc.enabled = true; }
+        else { tc.detach(); tc.visible = false; tc.enabled = false; }
+      }
+      function setWsMode(m) {
+        if (tc) tc.setMode(m);
+        document.querySelectorAll('.ws-mode').forEach((b) => {
+          const on = b.dataset.mode === m;
+          b.classList.toggle('bg-white', on); b.classList.toggle('shadow-sm', on);
+          b.classList.toggle('text-slate-900', on); b.classList.toggle('text-slate-600', !on);
+        });
+      }
+      let wsSnap = false;
+      function setWsSnap(v) {
+        wsSnap = v;
+        if (tc) { tc.setTranslationSnap(v ? 0.5 : null); tc.setRotationSnap(v ? THREE.MathUtils.degToRad(15) : null); tc.setScaleSnap(v ? 0.1 : null); }
+        document.getElementById('ws-snap').classList.toggle('ring-2', v);
+        document.getElementById('ws-snap').classList.toggle('ring-amber-400', v);
+      }
+      function resetObj(o) {
+        const r = o.userData.wsOrig;
+        if (!r) return;
+        o.position.copy(r.p); o.quaternion.copy(r.q); o.scale.copy(r.s);
+        wsEdited.delete(o);
+      }
+      function openWorkshop() {
+        if (driveMode) setDriveMode(false);
+        stopAssembly();
+        endIsolation(false);
+        closeLibrary();
+        if (isExploded) btnExplode.click();
+        setAutoRotate(false);
+        setPartsOpen(false);
+        selectPart(null);
+        workshop = true;
+        wsPanel.classList.remove('hidden');
+        wsSelect(null);
+        layoutPanels();
+      }
+      function closeWorkshop() {
+        workshop = false;
+        wsSelect(null);
+        wsPanel.classList.add('hidden');
+      }
+      // Atölyede tıklama: parça seç (bilgi kartı yerine taşıma tutamacı)
+      function workshopPick(e) {
+        if (tcJustDragged) { tcJustDragged = false; return; }
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        const pickables = interactiveMeshes.concat(customParts.flatMap((c) => c.meshes));
+        const hit = raycaster.intersectObjects(pickables, false).find((h) => isVisibleDeep(h.object));
+        if (!hit) { wsSelect(null); return; }
+        const custom = customParts.find((c) => c.meshes.includes(hit.object));
+        if (custom) wsSelect(custom.root, custom.name + ' (sizin parçanız)');
+        else wsSelect(movableRoot(hit.object), hit.object.userData.partLabel || 'Parça');
+      }
+
+      document.getElementById('btn-workshop').addEventListener('click', () => (workshop ? closeWorkshop() : openWorkshop()));
+      document.getElementById('ws-close').addEventListener('click', closeWorkshop);
+      document.querySelectorAll('.ws-mode').forEach((b) => b.addEventListener('click', () => setWsMode(b.dataset.mode)));
+      document.getElementById('ws-snap').addEventListener('click', () => setWsSnap(!wsSnap));
+      document.getElementById('ws-reset-one').addEventListener('click', () => { if (wsSelected) resetObj(wsSelected); });
+      document.getElementById('ws-reset-all').addEventListener('click', () => {
+        Array.from(wsEdited).forEach(resetObj);
+        robotGroup.traverse((o) => { if (o.userData.wsOrig && !o.userData.custom) resetObj(o); });
+      });
+      window.addEventListener('keydown', (e) => {
+        if (!workshop || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+        if (e.code === 'KeyW') setWsMode('translate');
+        if (e.code === 'KeyE') setWsMode('rotate');
+        if (e.code === 'KeyR') setWsMode('scale');
+        if (e.key === 'Escape') wsSelect(null);
+        if (e.key === 'Delete' && wsSelected && wsSelected.userData.custom) removeCustom(wsSelected.userData.customId);
+      });
+
+      // ---- Kendi 3D dosyanı ekle (GLB, glTF, STL, OBJ) — tarayıcıda saklanır
+      const DB_NAME = 'otonom-park-atolye';
+      function idb() {
+        return new Promise((res, rej) => {
+          try {
+            const r = indexedDB.open(DB_NAME, 1);
+            r.onupgradeneeded = () => r.result.createObjectStore('parts', { keyPath: 'id' });
+            r.onsuccess = () => res(r.result);
+            r.onerror = () => rej(r.error);
+          } catch (err) { rej(err); }
+        });
+      }
+      async function dbPut(rec) { try { const d = await idb(); d.transaction('parts', 'readwrite').objectStore('parts').put(rec); } catch (err) {} }
+      async function dbDel(id) { try { const d = await idb(); d.transaction('parts', 'readwrite').objectStore('parts').delete(id); } catch (err) {} }
+      async function dbAll() {
+        try {
+          const d = await idb();
+          return await new Promise((res) => { const q = d.transaction('parts').objectStore('parts').getAll(); q.onsuccess = () => res(q.result || []); q.onerror = () => res([]); });
+        } catch (err) { return []; }
+      }
+
+      function parseModel(ext, data) {
+        if (ext === 'stl') {
+          const geo = new THREE.STLLoader().parse(data);
+          geo.computeVertexNormals();
+          return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.5, metalness: 0.1 }));
+        }
+        if (ext === 'obj') return new THREE.OBJLoader().parse(data);
+        return new Promise((res, rej) => new THREE.GLTFLoader().parse(data, '', (g) => res(g.scene), rej));
+      }
+      function normalizeModel(obj, unit, zUp) {
+        const wrap = new THREE.Group();
+        const inner = new THREE.Group();
+        inner.add(obj);
+        if (zUp) inner.rotation.x = -Math.PI / 2;
+        wrap.add(inner);
+        let box = new THREE.Box3().setFromObject(wrap);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        let k = 1;
+        if (unit === 'mm') k = 0.1;
+        else if (unit === 'm') k = 100;
+        else if (unit === 'auto') k = (maxDim > 60 || maxDim < 1) ? 10 / maxDim : 1;
+        inner.scale.setScalar(k);
+        box = new THREE.Box3().setFromObject(wrap);
+        const c = box.getCenter(new THREE.Vector3());
+        inner.position.set(-c.x, -box.min.y, -c.z);
+        return wrap;
+      }
+      async function addCustom(rec, place) {
+        let obj = parseModel(rec.ext, rec.data);
+        if (obj && obj.then) obj = await obj;
+        const root = normalizeModel(obj, rec.unit, rec.ext === 'stl' && rec.zUp);
+        root.userData.custom = true;
+        root.userData.customId = rec.id;
+        const meshes = [];
+        root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.userData.partLabel = rec.name; meshes.push(o); } });
+        if (rec.t) { root.position.fromArray(rec.t.p); root.quaternion.fromArray(rec.t.q); root.scale.fromArray(rec.t.s); }
+        else root.position.set(0, 12, 0);
+        robotGroup.add(root);
+        customParts.push({ id: rec.id, name: rec.name, root, meshes, rec });
+        renderCustomList();
+        if (place) { if (!workshop) openWorkshop(); wsSelect(root, rec.name + ' (sizin parçanız)'); }
+      }
+      function removeCustom(id) {
+        const i = customParts.findIndex((c) => c.id === id);
+        if (i < 0) return;
+        if (wsSelected === customParts[i].root) wsSelect(null);
+        robotGroup.remove(customParts[i].root);
+        customParts.splice(i, 1);
+        dbDel(id);
+        renderCustomList();
+      }
+      function saveCustomTransforms() {
+        customParts.forEach((c) => {
+          c.rec.t = { p: c.root.position.toArray(), q: c.root.quaternion.toArray(), s: c.root.scale.toArray() };
+          dbPut(c.rec);
+        });
+      }
+      function renderCustomList() {
+        const ul = document.getElementById('ws-custom-list');
+        ul.innerHTML = customParts.length ? customParts.map((c) =>
+          '<li class="flex items-center justify-between gap-2 py-1"><button type="button" data-cs="' + c.id + '" class="text-left text-xs font-medium text-slate-700 hover:underline truncate">' + c.name.replace(/</g, '&lt;') + '</button>' +
+          '<button type="button" data-cdel="' + c.id + '" class="flex-none text-[11px] font-semibold text-red-600 hover:underline">Sil</button></li>').join('')
+          : '<li class="text-[11px] text-slate-400 py-1">Henüz eklenmedi</li>';
+      }
+      document.getElementById('ws-custom-list').addEventListener('click', (e) => {
+        const s = e.target.closest('[data-cs]');
+        const d = e.target.closest('[data-cdel]');
+        if (d) removeCustom(d.dataset.cdel);
+        else if (s) { const c = customParts.find((x) => x.id === s.dataset.cs); if (c) wsSelect(c.root, c.name + ' (sizin parçanız)'); }
+      });
+      document.getElementById('ws-file').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files || []);
+        e.target.value = '';
+        for (const f of files) {
+          const ext = (f.name.split('.').pop() || '').toLowerCase();
+          if (!['glb', 'gltf', 'stl', 'obj'].includes(ext)) { toast('Desteklenmeyen dosya: ' + f.name); continue; }
+          try {
+            const data = (ext === 'obj' || ext === 'gltf') ? await f.text() : await f.arrayBuffer();
+            const rec = { id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6), name: f.name.replace(/\.[^.]+$/, ''), ext, data,
+              unit: document.getElementById('ws-unit').value, zUp: document.getElementById('ws-zup').checked };
+            await addCustom(rec, true);
+            dbPut(rec);
+            toast('"' + rec.name + '" eklendi. Tutamaçla yerine taşıyın.');
+          } catch (err) { toast(f.name + ' açılamadı. (glTF ise tek dosya .glb olarak dışa aktarın.)'); }
+        }
+      });
+      dbAll().then((recs) => recs.forEach((r) => addCustom(r, false).catch(() => {})));
+
+      // ---- Kısa bildirim
+      function toast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.remove('hidden');
+        clearTimeout(toast._t);
+        toast._t = setTimeout(() => t.classList.add('hidden'), 3800);
+      }
+
+      // ---- Ekran görüntüsü ve GLB: önizleme + indirme bağlantısı
+      const exportModal = document.getElementById('export-modal');
+      const exportLink = document.getElementById('export-link');
+      // Claude görünümünde dosya kaydetme izinli yoldan yapılır; GitHub Pages / bilgisayarda normal indirme bağlantısı çalışır
+      const inClaude = !!(window.claude && window.claude.use);
+      let dlApi = null;
+      if (inClaude) { try { window.claude.use('downloads').then((d) => { dlApi = d; }).catch(() => {}); } catch (err) {} }
+      let exportData = null;
+      function showExport(title, previewHtml, href, filename, note, data) {
+        document.getElementById('export-title').textContent = title;
+        document.getElementById('export-preview').innerHTML = previewHtml;
+        exportLink.href = href;
+        exportLink.download = filename;
+        exportData = data || null;
+        const ext = filename.split('.').pop();
+        const blocked = inClaude && ext === 'glb';
+        exportLink.classList.toggle('hidden', blocked);
+        document.getElementById('export-note').textContent = blocked
+          ? 'Claude içindeki görünümde .glb dosyası indirilemiyor. Sayfayı GitHub Pages ya da bilgisayarınızda (index.html) açıp bu düğmeye tekrar basın.'
+          : note;
+        exportModal.classList.remove('hidden');
+      }
+      exportLink.addEventListener('click', (e) => {
+        if (!inClaude) return;               // normal indirme
+        e.preventDefault();
+        if (!dlApi || !exportData) { toast('Bu görünümde kaydetme kullanılamıyor; görüntüye sağ tıklayıp kaydedin.'); return; }
+        dlApi.save({ filename: exportLink.download, data: exportData })
+          .then(() => toast('Kaydedildi.'))
+          .catch((err) => { if (!err || err.code !== 'declined') toast('Kaydedilemedi; görüntüye sağ tıklayıp kaydedin.'); });
+      });
+      document.getElementById('export-close').addEventListener('click', () => exportModal.classList.add('hidden'));
+      exportModal.addEventListener('click', (e) => { if (e.target === exportModal) exportModal.classList.add('hidden'); });
+      document.getElementById('btn-screenshot').addEventListener('click', () => {
+        const tcVis = tc ? tc.visible : false;
+        if (tc) tc.visible = false;
+        renderer.render(scene, camera);
+        const url = renderer.domElement.toDataURL('image/png');
+        if (tc) tc.visible = tcVis;
+        const bin = atob(url.split(',')[1]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        showExport('Ekran görüntüsü', '<img src="' + url + '" alt="Robotun ekran görüntüsü" class="w-full rounded-xl ring-1 ring-slate-200 bg-gradient-to-b from-white to-slate-100">',
+          url, 'otonom-park-robotu.png', 'İndirme başlamazsa görüntüye sağ tıklayıp "Resmi farklı kaydet" deyin.', new Blob([bytes], { type: 'image/png' }));
+      });
+      document.getElementById('btn-export-glb').addEventListener('click', () => {
+        try {
+          const tcVis = tc ? tc.visible : false;
+          if (tc) tc.visible = false;
+          new THREE.GLTFExporter().parse(robotGroup, (glb) => {
+            if (tc) tc.visible = tcVis;
+            const blob = new Blob([glb], { type: 'model/gltf-binary' });
+            const url = URL.createObjectURL(blob);
+            showExport('3D model (GLB)', '<div class="text-sm text-slate-700">Robotun 3D modeli hazır: <b>' + (blob.size / 1048576).toFixed(1) + ' MB</b>. Blender, Windows 3D Görüntüleyici ya da bir 3D yazıcı programıyla açılabilir.</div>',
+              url, 'otonom-park-robotu.glb', 'Blender ya da 3D Görüntüleyici ile açabilirsiniz.', blob);
+          }, { binary: true, onlyVisible: true });
+        } catch (err) { toast('GLB oluşturulamadı.'); }
+      });
+
+      // ---- Kütüphanede arama
+      document.getElementById('library-search').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLocaleLowerCase('tr');
+        document.querySelectorAll('#library-grid [data-lk]').forEach((b) => {
+          const p = PART_INFO[b.dataset.lk];
+          const hay = (p.name + ' ' + p.cat + ' ' + p.desc).toLocaleLowerCase('tr');
+          b.style.display = !q || hay.includes(q) ? '' : 'none';
+        });
+      });
 
       // 9. ANA ANİMASYON DÖNGÜSÜ
       const clock = new THREE.Clock();
