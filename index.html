@@ -1,0 +1,3167 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Otonom Park Robotu</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Three.js r128 ve OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 50% 42%, #ffffff 0%, #eef2f6 65%, #e2e8f0 100%);
+      user-select: none;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: grab;
+    }
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      box-shadow: 0 10px 30px -8px rgba(15, 23, 42, 0.12), 0 2px 6px -1px rgba(15, 23, 42, 0.05);
+    }
+    .btn-pill {
+      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .btn-pill:hover {
+      transform: translateY(-1px);
+    }
+    .btn-pill:active {
+      transform: translateY(0px) scale(0.97);
+    }
+    @keyframes spinSlow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spin-icon {
+      animation: spinSlow 4s linear infinite;
+    }
+    .part-item.active, .part-item.active:hover { background:#0f172a !important; color:#fff !important; }
+    .part-item.active .qty { color:#cbd5e1 !important; }
+    .dpad-btn { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; font-size:15px; font-weight:700; color:#0f172a; background:rgba(255,255,255,.9); border:1px solid rgba(15,23,42,.08); box-shadow:0 3px 10px -4px rgba(15,23,42,.25); touch-action:none; transition:background .12s, color .12s; }
+    .dpad-btn.pressed { background:#0f172a; color:#fff; }
+    button:focus-visible { outline:2px solid #f59e0b; outline-offset:2px; }
+    #parts-panel::-webkit-scrollbar { width:6px } #parts-panel::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px }
+    @media (prefers-reduced-motion: reduce) { .spin-icon { animation:none } }
+  </style>
+</head>
+<body>
+  <!-- 3D Sahne Konteyneri -->
+  <div id="canvas-container"></div>
+
+  <!-- Üst Bilgi Başlığı -->
+  <header class="fixed top-4 left-4 right-4 z-20 flex flex-wrap items-start justify-between gap-3 pointer-events-none">
+    <div class="glass-panel rounded-2xl px-4 py-3 pointer-events-auto max-w-md">
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 ring-4 ring-amber-400/20"></span>
+        <h1 class="text-sm sm:text-base font-bold text-slate-800 tracking-tight">
+          Otonom Park Robotu
+        </h1>
+      </div>
+      <p class="text-xs text-slate-600 mt-1">
+        Sensörleriyle boş yeri kendisi bulur, ölçer ve düz, geri ya da paralel park etmeye kendisi karar verir.
+      </p>
+      <p class="text-[11px] text-slate-400 mt-0.5">
+        Arduino Mega 2560 • L293D shield • 6× HC-SR04 • buzzer • 4WD
+      </p>
+    </div>
+
+    <!-- Seçili / Üzerine Gelinen Parça Rozeti -->
+    <div id="part-badge" class="glass-panel rounded-2xl px-4 py-2.5 pointer-events-auto transition-opacity duration-200 opacity-0">
+      <div class="text-[11px] font-medium uppercase tracking-wider text-slate-400">İncelenen Parça</div>
+      <div id="part-name" class="text-xs sm:text-sm font-semibold text-slate-800 mt-0.5">—</div>
+    </div>
+  </header>
+
+  <!-- Malzeme Listesi Paneli -->
+  <aside id="parts-panel" class="glass-panel fixed z-20 left-4 w-64 rounded-2xl p-2.5 overflow-y-auto" style="top:112px">
+    <div class="flex items-center justify-between mb-1.5 px-1.5 pt-0.5">
+      <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Malzeme Listesi</div>
+      <div id="parts-total" class="text-[11px] font-medium text-slate-400"></div>
+    </div>
+    <ul id="parts-list" class="flex flex-col gap-0.5"></ul>
+  </aside>
+
+  <!-- Parça Bilgi Kartı -->
+  <div id="info-card" class="glass-panel fixed z-20 right-4 left-4 md:left-auto md:w-80 rounded-2xl p-4 hidden" style="top:112px">
+    <div class="flex items-start justify-between gap-2">
+      <div>
+        <div id="info-cat" class="text-[11px] font-semibold uppercase tracking-wider text-amber-600"></div>
+        <h2 id="info-title" class="text-sm sm:text-base font-bold text-slate-800 mt-0.5 leading-snug"></h2>
+      </div>
+      <button id="info-close" type="button" class="flex-none w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 grid place-items-center" aria-label="Kapat">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <img id="info-img" class="hidden w-full h-40 object-contain bg-white rounded-xl mt-3 ring-1 ring-slate-200" alt="">
+    <p id="info-desc" class="text-xs sm:text-[13px] text-slate-600 mt-2 leading-relaxed"></p>
+    <dl id="info-specs" class="mt-3 pt-3 border-t border-slate-200/80 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs"></dl>
+    <div class="text-[10px] text-slate-400 mt-3">Değerler bu tip parçalar için tipik değerlerdir.</div>
+  </div>
+
+  <!-- Alt Kontrol Çubuğu -->
+  <footer id="footer" class="fixed bottom-4 left-3 right-3 z-20 flex flex-col items-center gap-2 pointer-events-none">
+    <!-- Sürüş Göstergesi -->
+    <div id="drive-hud" class="glass-panel rounded-2xl p-2.5 pointer-events-auto hidden">
+      <div class="flex flex-wrap items-center justify-center gap-3">
+        <div id="hud-alarm" class="hidden w-full text-center text-xs font-bold text-white rounded-lg px-3 py-1.5"></div>
+        <div class="w-full flex flex-wrap items-center justify-center gap-2">
+          <div class="flex bg-slate-100/90 p-1 rounded-xl gap-1" role="group" aria-label="Sürüş alanı">
+            <button type="button" data-layout="park" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm">Otopark</button>
+            <button type="button" data-layout="free" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600">Serbest Sürüş</button>
+          </div>
+          <div id="park-controls" class="hidden flex flex-wrap items-center gap-1.5">
+            <button type="button" id="btn-autopark" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-400 text-slate-900 shadow-sm">Otomatik Park Et</button>
+            <button type="button" id="btn-obstacle" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-orange-500 text-white shadow-sm">Engel Koy</button>
+            <button type="button" id="btn-newlot" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Yeni Otopark</button>
+            <button type="button" id="btn-park-reset" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Başa Dön</button>
+          </div>
+        </div>
+        <div id="park-status" class="hidden w-full text-center text-xs font-semibold text-slate-700 bg-white/80 rounded-lg px-3 py-1.5"></div>
+        <div id="park-log" class="hidden w-full max-w-md text-[11px] leading-snug bg-white/70 rounded-lg px-3 py-1.5 flex flex-col gap-0.5"></div>
+        <div class="flex items-center gap-4 px-2">
+          <div><div class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Hız</div><div id="hud-speed" class="text-base font-bold text-slate-800 tabular-nums whitespace-nowrap">0 cm/s</div></div>
+          <div><div class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Sensörler (cm)</div><div id="hud-sonars" class="grid grid-cols-3 gap-x-3 text-[11px] tabular-nums mt-0.5"></div></div>
+          <div><div class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Mod</div><div id="hud-mode" class="text-sm font-semibold text-slate-800 whitespace-nowrap">Manuel</div></div>
+        </div>
+        <div id="dpad" class="grid grid-cols-3 gap-1">
+          <span></span><button type="button" class="dpad-btn" data-dir="f" aria-label="İleri">▲</button><span></span>
+          <button type="button" class="dpad-btn" data-dir="l" aria-label="Sola dön">◀</button>
+          <button type="button" class="dpad-btn" data-dir="b" aria-label="Geri">▼</button>
+          <button type="button" class="dpad-btn" data-dir="r" aria-label="Sağa dön">▶</button>
+        </div>
+        <div class="flex flex-col gap-1.5 items-stretch">
+          <button id="btn-auto" type="button" class="btn-pill px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Otonom Sürüş</button>
+          <button id="btn-sound" type="button" class="btn-pill px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-white text-slate-600 border border-slate-200/80">Buzzer sesi: Açık</button>
+          <div class="text-[11px] text-slate-500 text-center hidden sm:block">Klavye: W A S D / oklar</div>
+        </div>
+      </div>
+    </div>
+    <div class="glass-panel rounded-2xl p-2 pointer-events-auto max-w-full overflow-x-auto">
+      <div class="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+        <!-- 360 Otomatik Döndürme -->
+        <button
+          id="btn-autorotate"
+          type="button"
+          class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white shadow-sm"
+          title="360 derece otomatik dönüşü aç/kapat"
+        >
+          <svg id="icon-autorotate" class="w-4 h-4 spin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>360° Otomatik Döndür</span>
+        </button>
+
+        <div class="hidden sm:block w-px h-6 bg-slate-200 mx-0.5"></div>
+
+        <!-- Kamera Açı Önayarları -->
+        <div class="flex items-center bg-slate-100/90 p-1 rounded-xl gap-1" role="group" aria-label="Kamera Açıları">
+          <button data-view="iso" class="view-btn btn-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm">
+            Çapraz
+          </button>
+          <button data-view="front" class="view-btn btn-pill px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900">
+            Ön
+          </button>
+          <button data-view="side" class="view-btn btn-pill px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900">
+            Yan
+          </button>
+          <button data-view="top" class="view-btn btn-pill px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900">
+            Üst
+          </button>
+          <button data-view="bottom" class="view-btn btn-pill px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900">
+            Alt
+          </button>
+        </div>
+
+        <div class="hidden sm:block w-px h-6 bg-slate-200 mx-0.5"></div>
+
+        <!-- Üst Şasiyi Gizle / Göster -->
+        <button
+          id="btn-topdeck"
+          type="button"
+          class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50"
+        >
+          <svg class="w-4 h-4 text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          <span id="label-topdeck">Üst Katı Gizle</span>
+        </button>
+
+        <!-- Patlatılmış Görünüm -->
+        <button
+          id="btn-explode"
+          type="button"
+          class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50"
+        >
+          <svg class="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+          <span id="label-explode">Patlatılmış Görünüm</span>
+        </button>
+
+        <!-- Tekerlek / Motor Testi -->
+        <button
+          id="btn-drive"
+          type="button"
+          class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50"
+        >
+          <svg class="w-4 h-4 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="3" />
+            <path stroke-linecap="round" d="M12 3v6M12 15v6M3 12h6M15 12h6" />
+          </svg>
+          <span id="label-drive">Motor Testi</span>
+        </button>
+
+        <!-- Sonar Tarama -->
+        <button id="btn-sonar" type="button" class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50">
+          <svg class="w-4 h-4 text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M8.5 15.5a5 5 0 010-7M15.5 8.5a5 5 0 010 7M5.6 18.4a9 9 0 010-12.8M18.4 5.6a9 9 0 010 12.8"/><circle cx="12" cy="12" r="1.5"/></svg>
+          <span id="label-sonar">Sensör Alanları</span>
+        </button>
+
+        <!-- Adım Adım Montaj -->
+        <button id="btn-assembly" type="button" class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50">
+          <svg class="w-4 h-4 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>
+          <span>Adım Adım Montaj</span>
+        </button>
+
+        <!-- Parça Kütüphanesi -->
+        <button id="btn-library" type="button" class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50">
+          <svg class="w-4 h-4 text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span>Parça Kütüphanesi</span>
+        </button>
+
+        <!-- Gerçek Parçalar -->
+        <button id="btn-gallery" type="button" class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50">
+          <svg class="w-4 h-4 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 17l-5-5-8 7"/></svg>
+          <span>Gerçek Parçalar</span>
+        </button>
+
+        <!-- Parça Listesi -->
+        <button id="btn-parts" type="button" class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 hover:bg-slate-50">
+          <svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h10"/></svg>
+          <span>Parçalar</span>
+        </button>
+
+        <!-- Sürüş Modu -->
+        <button id="btn-drivemode" type="button" class="btn-pill flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-400 text-slate-900 shadow-sm hover:bg-amber-300">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="6"/><path stroke-linecap="round" d="M6.5 12h4M8.5 10v4"/><circle cx="15.5" cy="11" r="1" fill="currentColor"/><circle cx="17.5" cy="13.5" r="1" fill="currentColor"/></svg>
+          <span id="label-drivemode">Park Simülasyonu</span>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Montaj paneli -->
+  <div id="asm-panel" class="glass-panel fixed z-20 left-4 right-4 sm:right-auto sm:w-80 rounded-2xl p-4 hidden" style="top:112px">
+    <div class="flex items-start justify-between gap-2">
+      <div>
+        <div id="asm-step" class="text-[11px] font-semibold uppercase tracking-wider text-violet-600"></div>
+        <h2 id="asm-title" class="text-sm sm:text-base font-bold text-slate-800 mt-0.5"></h2>
+      </div>
+      <button id="asm-close" type="button" class="flex-none w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 grid place-items-center" aria-label="Montajı kapat">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="asm-dots" class="flex gap-1 mt-2"></div>
+    <p id="asm-desc" class="text-xs sm:text-[13px] text-slate-600 mt-2 leading-relaxed min-h-[3.2em]"></p>
+    <div class="flex gap-1.5 mt-3">
+      <button id="asm-prev" type="button" class="btn-pill flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 disabled:opacity-40">◀ Geri</button>
+      <button id="asm-play" type="button" class="btn-pill flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white">Oynat</button>
+      <button id="asm-next" type="button" class="btn-pill flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80 disabled:opacity-40">İleri ▶</button>
+    </div>
+  </div>
+
+  <!-- Tek parça inceleme paneli -->
+  <div id="iso-panel" class="glass-panel fixed z-20 left-4 rounded-2xl p-3 hidden" style="top:112px">
+    <div class="text-[11px] font-semibold uppercase tracking-wider text-sky-600">Parça kütüphanesi · <span id="iso-count"></span></div>
+    <div id="iso-title" class="text-sm font-bold text-slate-800 mt-0.5"></div>
+    <div class="flex gap-1.5 mt-2">
+      <button id="iso-prev" type="button" class="btn-pill px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80" aria-label="Önceki parça">◀</button>
+      <button id="iso-next" type="button" class="btn-pill px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80" aria-label="Sonraki parça">▶</button>
+      <button id="iso-library" type="button" class="btn-pill px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Kütüphane</button>
+      <button id="iso-close" type="button" class="btn-pill px-3 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white">Tümünü Göster</button>
+    </div>
+  </div>
+
+  <!-- Parça Kütüphanesi -->
+  <div id="library" class="fixed inset-0 z-40 hidden bg-slate-900/60 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Parça kütüphanesi">
+    <div class="max-w-5xl mx-auto bg-white rounded-2xl p-4 sm:p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-800">Parça Kütüphanesi</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Robotun her parçası tek başına. Bir parçaya tıklayınca yalnızca o parça gösterilir; döndürüp yakından inceleyebilirsiniz.</p>
+        </div>
+        <button id="library-close" type="button" class="flex-none w-10 h-10 rounded-xl text-slate-500 hover:bg-slate-100 grid place-items-center" aria-label="Kapat">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div id="library-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+    </div>
+  </div>
+
+  <!-- Gerçek Parçalar Galerisi -->
+  <div id="gallery" class="fixed inset-0 z-40 hidden bg-slate-900/60 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Gerçek parçalar">
+    <div class="max-w-4xl mx-auto bg-white rounded-2xl p-4 sm:p-6 shadow-2xl">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-slate-800">Gerçek Parçalar</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Robotta kullanılan malzemeler. Bir parçaya tıklayınca 3D modelde gösterilir.</p>
+        </div>
+        <button id="gallery-close" type="button" class="flex-none w-10 h-10 rounded-xl text-slate-500 hover:bg-slate-100 grid place-items-center" aria-label="Kapat">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div id="gallery-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * 4WD Akıllı Robot Araç Şasisi — 360° İnteraktif 3D Görüntüleyici
+     * Ölçek: 1 sahne birimi = 10 mm (1 cm)
+     * Koordinat Sistemi:
+     *   +Y: Yukarı (Zemin y = 0)
+     *   +Z: Ön (Siyah ön tampon yönü)
+     *   +X: Aracın solu, -X: Aracın sağı
+     */
+    (function () {
+      const container = document.getElementById('canvas-container');
+
+      // 1. SAHNE, KAMERA VE RENDERER KURULUMU
+      const scene = new THREE.Scene();
+
+      const camera = new THREE.PerspectiveCamera(
+        38,
+        window.innerWidth / window.innerHeight,
+        0.5,
+        700
+      );
+      // Referans fotoğraftaki çapraz (front-left 3/4) bakış açısı
+      const CAMERA_PRESETS = {
+        iso:    { pos: new THREE.Vector3(-20.5, 16.5, 22.5), target: new THREE.Vector3(0, 3.6, 0.4) },
+        front:  { pos: new THREE.Vector3(0, 8.5, 30.0),      target: new THREE.Vector3(0, 3.6, 0) },
+        side:   { pos: new THREE.Vector3(-31.0, 8.0, 0),     target: new THREE.Vector3(0, 3.6, 0) },
+        top:    { pos: new THREE.Vector3(0, 33.0, 0.01),     target: new THREE.Vector3(0, 3.5, 0) },
+        bottom: { pos: new THREE.Vector3(-12.0, -24.0, 14.0),target: new THREE.Vector3(0, 3.2, 0) }
+      };
+      camera.position.copy(CAMERA_PRESETS.iso.pos);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.08;
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      container.appendChild(renderer.domElement);
+
+      // 2. PROSEDÜREL STÜDYO ÇEVRE HARİTASI (PMREM) — Akrilik, pirinç ve metalik motor yansımaları için
+      function createStudioEnvironment() {
+        const envScene = new THREE.Scene();
+        envScene.background = new THREE.Color(0xf4f6f9);
+
+        const panelMatBright = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        const panelMatWarm   = new THREE.MeshBasicMaterial({ color: 0xfff8eb, side: THREE.DoubleSide });
+        const panelMatCool   = new THREE.MeshBasicMaterial({ color: 0xe6eef8, side: THREE.DoubleSide });
+
+        // Üst stüdyo softbox
+        const topBox = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), panelMatBright);
+        topBox.position.set(0, 22, 0);
+        topBox.rotation.x = Math.PI / 2;
+        envScene.add(topBox);
+
+        // Sol ve sağ stüdyo reflektör panelleri
+        const leftBox = new THREE.Mesh(new THREE.PlaneGeometry(35, 22), panelMatWarm);
+        leftBox.position.set(24, 8, 6);
+        leftBox.lookAt(0, 0, 0);
+        envScene.add(leftBox);
+
+        const rightBox = new THREE.Mesh(new THREE.PlaneGeometry(35, 22), panelMatCool);
+        rightBox.position.set(-24, 9, -4);
+        rightBox.lookAt(0, 0, 0);
+        envScene.add(rightBox);
+
+        // Ön dolgu şeridi
+        const frontStrip = new THREE.Mesh(new THREE.PlaneGeometry(30, 12), panelMatBright);
+        frontStrip.position.set(0, 10, 26);
+        frontStrip.lookAt(0, 0, 0);
+        envScene.add(frontStrip);
+
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileEquirectangularShader();
+        const envRT = pmremGenerator.fromScene(envScene, 0.04);
+        pmremGenerator.dispose();
+        return envRT.texture;
+      }
+      scene.environment = createStudioEnvironment();
+
+      // 3. STÜDYO IŞIKLANDIRMA VE ZEMİN GÖLGESİ
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0xdbe4ee, 0.85);
+      hemiLight.position.set(0, 30, 0);
+      scene.add(hemiLight);
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 0.95);
+      keyLight.position.set(-16, 28, 18);
+      keyLight.castShadow = true;
+      keyLight.shadow.mapSize.width = 2048;
+      keyLight.shadow.mapSize.height = 2048;
+      keyLight.shadow.camera.near = 5;
+      keyLight.shadow.camera.far = 70;
+      const d = 26;
+      keyLight.shadow.camera.left = -d;
+      keyLight.shadow.camera.right = d;
+      keyLight.shadow.camera.top = d;
+      keyLight.shadow.camera.bottom = -d;
+      keyLight.shadow.bias = -0.0005;
+      keyLight.shadow.normalBias = 0.02;
+      scene.add(keyLight);
+
+      const rimLight = new THREE.DirectionalLight(0xeef6ff, 0.55);
+      rimLight.position.set(18, 16, -20);
+      scene.add(rimLight);
+
+      // Yumuşak stüdyo zemin gölge düzlemi
+      const shadowGround = new THREE.Mesh(
+        new THREE.PlaneGeometry(90, 90),
+        new THREE.ShadowMaterial({ opacity: 0.14 })
+      );
+      shadowGround.rotation.x = -Math.PI / 2;
+      shadowGround.position.y = -0.01;
+      shadowGround.receiveShadow = true;
+      scene.add(shadowGround);
+
+      // 4. ORBIT CONTROLS (360° Fare ve Dokunmatik Kontrol)
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.target.copy(CAMERA_PRESETS.iso.target);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.065;
+      controls.rotateSpeed = 0.85;
+      controls.zoomSpeed = 0.95;
+      controls.panSpeed = 0.8;
+      controls.minDistance = 12;
+      controls.maxDistance = 58;
+      controls.maxPolarAngle = Math.PI * 0.94; // Alt şasiyi görebilmek için geniş dikey açı
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 1.6;
+
+      // 5. PAYLAŞILAN MALZEMELER
+      const materials = {
+        // Alt siyah parlak/saten lazer kesim akrilik
+        blackAcrylic: new THREE.MeshPhysicalMaterial({
+          color: 0x16181d,
+          roughness: 0.24,
+          metalness: 0.08,
+          clearcoat: 0.75,
+          clearcoatRoughness: 0.18,
+          envMapIntensity: 1.2
+        }),
+        // Üst şeffaf akrilik yüzey
+        clearAcrylicFace: new THREE.MeshPhysicalMaterial({
+          color: 0xf8fcff,
+          roughness: 0.05,
+          metalness: 0.02,
+          transparent: true,
+          opacity: 0.26,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.04,
+          reflectivity: 1.0,
+          envMapIntensity: 2.3,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        }),
+        // Üst şeffaf akriliğin lazer kesim parlak kenarları
+        clearAcrylicEdge: new THREE.MeshPhysicalMaterial({
+          color: 0xdff2ff,
+          roughness: 0.12,
+          metalness: 0.05,
+          transparent: true,
+          opacity: 0.58,
+          clearcoat: 1.0,
+          envMapIntensity: 2.5,
+          side: THREE.DoubleSide
+        }),
+        // Altıgen pirinç yükseltici (standoff)
+        brass: new THREE.MeshStandardMaterial({
+          color: 0xd8b24c,
+          roughness: 0.24,
+          metalness: 0.88,
+          envMapIntensity: 1.5
+        }),
+        // Gümüş vida ve DC motor gövdesi
+        silverMetal: new THREE.MeshStandardMaterial({
+          color: 0xd6dce2,
+          roughness: 0.22,
+          metalness: 0.90,
+          envMapIntensity: 1.5
+        }),
+        // TT motor ve jant sarısı
+        ttYellow: new THREE.MeshPhysicalMaterial({
+          color: 0xf7c600,
+          roughness: 0.30,
+          metalness: 0.04,
+          clearcoat: 0.35,
+          clearcoatRoughness: 0.25,
+          envMapIntensity: 1.0
+        }),
+        // Beyaz plastik motor mili
+        whiteNylon: new THREE.MeshStandardMaterial({
+          color: 0xf3f4f6,
+          roughness: 0.42,
+          metalness: 0.02
+        }),
+        // Motor arka plastik kapağı
+        darkGrayPlastic: new THREE.MeshStandardMaterial({
+          color: 0x2d3138,
+          roughness: 0.55,
+          metalness: 0.1
+        }),
+        // Bakır motor lehim uçları
+        copper: new THREE.MeshStandardMaterial({
+          color: 0xc87533,
+          roughness: 0.3,
+          metalness: 0.85
+        }),
+        // Tekerlek kauçuk lastiği
+        rubberTire: new THREE.MeshStandardMaterial({
+          color: 0x1c1e22,
+          roughness: 0.84,
+          metalness: 0.04,
+          envMapIntensity: 0.55
+        }),
+        // Mat siyah 4xAA pil yuvası
+        matteBlackPlastic: new THREE.MeshStandardMaterial({
+          color: 0x181a1e,
+          roughness: 0.68,
+          metalness: 0.05
+        }),
+        // AA Pil gövdesi (Klasik siyah-altın/bakır alkalin pil renkleri)
+        batteryBodyDark: new THREE.MeshStandardMaterial({
+          color: 0x1f242d,
+          roughness: 0.35,
+          metalness: 0.25
+        }),
+        batteryCopperTop: new THREE.MeshStandardMaterial({
+          color: 0xd97706,
+          roughness: 0.28,
+          metalness: 0.72
+        }),
+        // Elektronik kartlar
+        pcbTeal:      new THREE.MeshStandardMaterial({ color: 0x0e7c86, roughness: 0.45, metalness: 0.1 }),
+        pcbRed:       new THREE.MeshStandardMaterial({ color: 0xb4232a, roughness: 0.45, metalness: 0.1 }),
+        pcbBlue:      new THREE.MeshStandardMaterial({ color: 0x1e4fd8, roughness: 0.45, metalness: 0.1 }),
+        servoBlue:    new THREE.MeshStandardMaterial({ color: 0x2b59c3, roughness: 0.55, metalness: 0.05 }),
+        chipBlack:    new THREE.MeshStandardMaterial({ color: 0x15171b, roughness: 0.5, metalness: 0.1 }),
+        headerBlack:  new THREE.MeshStandardMaterial({ color: 0x0b0b0c, roughness: 0.6 }),
+        terminalBlue: new THREE.MeshStandardMaterial({ color: 0x1d6fe0, roughness: 0.5 }),
+        heatsink:     new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.38, metalness: 0.7 }),
+        ledGreen:     new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 0.9 }),
+        ledAmber:     new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.9 }),
+        ledRed:       new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 0.9 }),
+        sonarCone:    new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.13, depthWrite: false, side: THREE.DoubleSide }),
+        wireYellow:   new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.45 }),
+        wireGreen:    new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.45 }),
+        wireBlue:     new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.45 }),
+        wireOrange:   new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.45 }),
+        wireBrown:    new THREE.MeshStandardMaterial({ color: 0x7c4a2d, roughness: 0.45 }),
+        pcbMega:      new THREE.MeshStandardMaterial({ color: 0x1f5fbf, roughness: 0.45, metalness: 0.1 }),
+        pcbShield:    new THREE.MeshStandardMaterial({ color: 0x1a46b8, roughness: 0.45, metalness: 0.1 }),
+        terminalGreen:new THREE.MeshStandardMaterial({ color: 0x15a34a, roughness: 0.5 }),
+        wheelRim:     new THREE.MeshPhysicalMaterial({ color: 0x24262b, roughness: 0.4, metalness: 0.05, clearcoat: 0.3, clearcoatRoughness: 0.3 }),
+        buzzerBody:   new THREE.MeshStandardMaterial({ color: 0x101114, roughness: 0.5, emissive: 0xff1a1a, emissiveIntensity: 0 }),
+        clearPlastic: new THREE.MeshPhysicalMaterial({ color: 0xf1f5f9, roughness: 0.2, transparent: true, opacity: 0.55, clearcoat: 0.6 }),
+        // Kablolar
+        wireRed: new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45 }),
+        wireBlack: new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.45 })
+      };
+
+      // 6. ANA ROBOT GRUBU VE ALT GRUPLAR
+      const robotGroup = new THREE.Group();
+      scene.add(robotGroup);
+
+      const bottomDeckGroup = new THREE.Group();
+      const topDeckGroup    = new THREE.Group();
+      const standoffsGroup  = new THREE.Group();
+      const topScrewsGroup  = new THREE.Group();
+      const motorsGroup     = new THREE.Group();
+      const wheelsGroup     = new THREE.Group();
+      const batteryGroup    = new THREE.Group();
+
+      robotGroup.add(
+        bottomDeckGroup,
+        standoffsGroup,
+        motorsGroup,
+        wheelsGroup,
+        batteryGroup,
+        topDeckGroup,
+        topScrewsGroup
+      );
+
+      // Etkileşimli parça etiketleme yardımcısı
+      const interactiveMeshes = [];
+      const partMeshesByKey = {};
+      function tagPart(object3D, label, key) {
+        object3D.traverse((child) => {
+          if (child.isMesh) {
+            child.userData.partLabel = label;
+            child.userData.partKey = key;
+            interactiveMeshes.push(child);
+            (partMeshesByKey[key] = partMeshesByKey[key] || []).push(child);
+          }
+        });
+      }
+
+      // Delik / slot açma yardımcıları (THREE.Shape / Path)
+      function addCircleHole(shape, cx, cz, r) {
+        const hole = new THREE.Path();
+        hole.absarc(cx, cz, r, 0, Math.PI * 2, true);
+        shape.holes.push(hole);
+      }
+
+      function addSlotHole(shape, cx, cz, w, d, r) {
+        const hole = new THREE.Path();
+        const hw = w / 2;
+        const hd = d / 2;
+        const cr = Math.min(r, hw, hd);
+        hole.moveTo(cx - hw + cr, cz - hd);
+        hole.lineTo(cx + hw - cr, cz - hd);
+        hole.quadraticCurveTo(cx + hw, cz - hd, cx + hw, cz - hd + cr);
+        hole.lineTo(cx + hw, cz + hd - cr);
+        hole.quadraticCurveTo(cx + hw, cz + hd, cx + hw - cr, cz + hd);
+        hole.lineTo(cx - hw + cr, cz + hd);
+        hole.quadraticCurveTo(cx - hw, cz + hd, cx - hw, cz + hd - cr);
+        hole.lineTo(cx - hw, cz - hd + cr);
+        hole.quadraticCurveTo(cx - hw, cz - hd, cx - hw + cr, cz - hd);
+        shape.holes.push(hole);
+      }
+
+      // -----------------------------------------------------------------------
+      // A) ALT SİYAH AKRİLİK ŞASİ PLAKASI (Çıkıntılı ön tamponlu lazer kesim form)
+      // -----------------------------------------------------------------------
+      function buildBottomDeck() {
+        const s = new THREE.Shape();
+        // Ön tampon ucu (z = +11.6) başlayıp saat yönünde profil
+        s.moveTo(-3.2, 11.6);
+        s.lineTo( 3.2, 11.6);
+        s.quadraticCurveTo(5.6, 11.4, 6.6, 9.7);
+        s.lineTo( 6.6, 8.8);
+        s.lineTo( 5.4, 8.4);
+        s.lineTo( 5.4, 3.8);
+        s.lineTo( 6.3, 3.2);
+        s.lineTo( 6.3, -3.2);
+        s.lineTo( 5.4, -3.8);
+        s.lineTo( 5.4, -8.5);
+        s.lineTo( 6.4, -9.2);
+        s.lineTo( 6.4, -10.4);
+        s.quadraticCurveTo(4.0, -11.2, 0, -11.2);
+        s.quadraticCurveTo(-4.0, -11.2, -6.4, -10.4);
+        s.lineTo(-6.4, -9.2);
+        s.lineTo(-5.4, -8.5);
+        s.lineTo(-5.4, -3.8);
+        s.lineTo(-6.3, -3.2);
+        s.lineTo(-6.3, 3.2);
+        s.lineTo(-5.4, 3.8);
+        s.lineTo(-5.4, 8.4);
+        s.lineTo(-6.6, 8.8);
+        s.lineTo(-6.6, 9.7);
+        s.quadraticCurveTo(-5.6, 11.4, -3.2, 11.6);
+        s.closePath();
+
+        // Ön sensör/servo yuvası ve kablo kanalları
+        addSlotHole(s, 0, 9.5, 2.0, 1.3, 0.2);
+        addSlotHole(s, -2.5, 9.2, 1.1, 0.45, 0.12);
+        addSlotHole(s,  2.5, 9.2, 1.1, 0.45, 0.12);
+        addCircleHole(s, 0, 6.2, 1.15);
+        addSlotHole(s, -3.4, 5.2, 0.48, 2.5, 0.14);
+        addSlotHole(s,  3.4, 5.2, 0.48, 2.5, 0.14);
+        addSlotHole(s, -3.4, -5.2, 0.48, 2.5, 0.14);
+        addSlotHole(s,  3.4, -5.2, 0.48, 2.5, 0.14);
+        addCircleHole(s, 0, -7.8, 1.2);
+
+        const geom = new THREE.ExtrudeGeometry(s, {
+          depth: 0.30,
+          bevelEnabled: true,
+          bevelSegments: 2,
+          steps: 1,
+          bevelSize: 0.03,
+          bevelThickness: 0.03
+        });
+        geom.rotateX(Math.PI / 2);
+
+        const mesh = new THREE.Mesh(geom, materials.blackAcrylic);
+        mesh.position.y = 2.20;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        tagPart(mesh, 'Alt Siyah Lazer Kesim Akrilik Şasi', 'chassisBottom');
+        bottomDeckGroup.add(mesh);
+      }
+
+      // -----------------------------------------------------------------------
+      // B) ÜST ŞEFFAF AKRİLİK ŞASİ PLAKASI (Arka kanatçıklı lazer kesim form)
+      // -----------------------------------------------------------------------
+      function buildTopDeck() {
+        const s = new THREE.Shape();
+        s.moveTo(-4.8, 9.4);
+        s.lineTo( 4.8, 9.4);
+        s.quadraticCurveTo(5.7, 9.3, 5.7, 8.2);
+        s.lineTo( 5.7, -7.6);
+        s.lineTo( 6.8, -8.3);
+        s.lineTo( 6.8, -10.2);
+        s.quadraticCurveTo(3.8, -11.0, 0, -11.0);
+        s.quadraticCurveTo(-3.8, -11.0, -6.8, -10.2);
+        s.lineTo(-6.8, -8.3);
+        s.lineTo(-5.7, -7.6);
+        s.lineTo(-5.7, 8.2);
+        s.quadraticCurveTo(-5.7, 9.3, -4.8, 9.4);
+        s.closePath();
+
+        // Ön ve arka dairesel sensör / kablo geçiş delikleri ve montaj yarıkları
+        addCircleHole(s, 0, 5.8, 1.25);
+        addCircleHole(s, 0, 2.7, 1.15);
+        addSlotHole(s, 0, 0.2, 2.2, 0.85, 0.2);
+        addSlotHole(s, -3.5, 5.5, 0.48, 2.2, 0.14);
+        addSlotHole(s,  3.5, 5.5, 0.48, 2.2, 0.14);
+        addSlotHole(s, -3.5, -2.5, 0.48, 2.8, 0.14);
+        addSlotHole(s,  3.5, -2.5, 0.48, 2.8, 0.14);
+        addCircleHole(s, 0, -7.6, 1.35);
+        addSlotHole(s, -3.8, -8.8, 1.4, 0.42, 0.12);
+        addSlotHole(s,  3.8, -8.8, 1.4, 0.42, 0.12);
+
+        const geom = new THREE.ExtrudeGeometry(s, {
+          depth: 0.28,
+          bevelEnabled: true,
+          bevelSegments: 2,
+          steps: 1,
+          bevelSize: 0.025,
+          bevelThickness: 0.025
+        });
+        geom.rotateX(Math.PI / 2);
+
+        const mesh = new THREE.Mesh(geom, [materials.clearAcrylicFace, materials.clearAcrylicEdge]);
+        mesh.position.y = 6.38;
+        mesh.renderOrder = 3;
+
+        // İnce lazer kesim kenar konturu
+        const edges = new THREE.EdgesGeometry(geom, 28);
+        const lineMat = new THREE.LineBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.55
+        });
+        const wireEdges = new THREE.LineSegments(edges, lineMat);
+        mesh.add(wireEdges);
+
+        tagPart(mesh, 'Üst Şeffaf Akrilik Şasi Plakası', 'chassisTop');
+        topDeckGroup.add(mesh);
+      }
+
+      // -----------------------------------------------------------------------
+      // C) 6 ADET ALTIGEN PİRİNÇ ARALAYICI (STANDOFF) VE ÜST/ALT VİDALAR
+      // -----------------------------------------------------------------------
+      function buildStandoffsAndScrews() {
+        const coords = [
+          [-4.7,  8.4],
+          [ 4.7,  8.4],
+          [-4.7,  0.0],
+          [ 4.7,  0.0],
+          [-4.7, -8.6],
+          [ 4.7, -8.6]
+        ];
+
+        const hexGeom = new THREE.CylinderGeometry(0.28, 0.28, 3.90, 6);
+        const screwHeadGeom = new THREE.CylinderGeometry(0.26, 0.26, 0.16, 16);
+        const washerGeom = new THREE.CylinderGeometry(0.32, 0.32, 0.05, 16);
+
+        coords.forEach(([x, z]) => {
+          // Pirinç altıgen gövde
+          const standoff = new THREE.Mesh(hexGeom, materials.brass);
+          standoff.position.set(x, 4.15, z);
+          standoff.castShadow = true;
+          standoffsGroup.add(standoff);
+
+          // Üst şasi vidası ve pulu
+          const topScrew = new THREE.Mesh(screwHeadGeom, materials.silverMetal);
+          topScrew.position.set(x, 6.48, z);
+          const topWasher = new THREE.Mesh(washerGeom, materials.silverMetal);
+          topWasher.position.set(x, 6.40, z);
+          topScrewsGroup.add(topScrew, topWasher);
+
+          // Alt şasi vidası
+          const botScrew = new THREE.Mesh(screwHeadGeom, materials.silverMetal);
+          botScrew.position.set(x, 1.82, z);
+          bottomDeckGroup.add(botScrew);
+        });
+
+        tagPart(standoffsGroup, '6x Altıgen Pirinç Yükseltici (M3 Standoff)', 'standoff');
+        tagPart(topScrewsGroup, 'M3 Montaj Vidaları', 'screws');
+        bottomDeckGroup.children.slice(1).forEach((m) => tagPart(m, 'M3 Montaj Vidaları', 'screws'));
+      }
+
+      // -----------------------------------------------------------------------
+      // D) YAN YANA SİMETRİK ÇİFT 4xAA PİL YUVASI (ALT ŞASİ ORTASINDA)
+      // -----------------------------------------------------------------------
+      const batteryLeftSubGroup = new THREE.Group();
+      const batteryRightSubGroup = new THREE.Group();
+
+      // Fotoğraftaki gibi: 4 AA pil tek sıra yan yana duran düz yuva (≈ 60 × 58 × 15 mm)
+      function createSingle4xAAHolder(zCenter, label, wireSide) {
+        const holder = new THREE.Group();
+        holder.position.set(0, 0, zCenter);
+        const W = 6.0, D = 5.8, wall = 0.14;
+        const M = materials.matteBlackPlastic;
+        const base = new THREE.Mesh(new THREE.BoxGeometry(W, wall, D), M);
+        base.position.y = wall / 2;
+        base.castShadow = true;
+        base.receiveShadow = true;
+        holder.add(base);
+        // Uç duvarlar (yaylı kontaklar burada) yüksek, yan duvarlar alçak
+        [-1, 1].forEach((sgn) => {
+          const end = new THREE.Mesh(new THREE.BoxGeometry(W, 1.5, wall * 1.6), M);
+          end.position.set(0, 0.75, sgn * (D / 2 - wall * 0.8));
+          end.castShadow = true;
+          holder.add(end);
+          const side = new THREE.Mesh(new THREE.BoxGeometry(wall, 0.9, D), M);
+          side.position.set(sgn * (W / 2 - wall / 2), 0.45, 0);
+          holder.add(side);
+        });
+        // Piller arası ince ayraçlar
+        [-0.72, 0, 0.72].forEach((x) => {
+          const rib = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, D - 0.6), M);
+          rib.position.set(x * 2, 0.32, 0);
+          holder.add(rib);
+        });
+        // 4 adet AA pil: siyah gövde + bakır uç, kutuplar dönüşümlü
+        const cellR = 0.7, cellLen = 5.05;
+        const bodyGeom = new THREE.CylinderGeometry(cellR, cellR, cellLen * 0.62, 24); bodyGeom.rotateX(Math.PI / 2);
+        const capGeom = new THREE.CylinderGeometry(cellR, cellR, cellLen * 0.38, 24); capGeom.rotateX(Math.PI / 2);
+        const nubGeom = new THREE.CylinderGeometry(0.26, 0.26, 0.12, 14); nubGeom.rotateX(Math.PI / 2);
+        const springGeom = new THREE.TorusGeometry(0.32, 0.05, 6, 16);
+        [-2.18, -0.73, 0.73, 2.18].forEach((x, i) => {
+          const dir = i % 2 === 0 ? 1 : -1;
+          const cell = new THREE.Group();
+          const body = new THREE.Mesh(bodyGeom, materials.batteryBodyDark);
+          body.position.z = -dir * cellLen * 0.19;
+          body.castShadow = true;
+          const cap = new THREE.Mesh(capGeom, materials.batteryCopperTop);
+          cap.position.z = dir * cellLen * 0.31;
+          cap.castShadow = true;
+          const nub = new THREE.Mesh(nubGeom, materials.silverMetal);
+          nub.position.z = dir * (cellLen / 2 + 0.06);
+          cell.add(body, cap, nub);
+          cell.position.set(x, 0.14 + cellR, 0);
+          holder.add(cell);
+          // Eksi uçtaki yay
+          for (let k = 0; k < 3; k++) {
+            const sp = new THREE.Mesh(springGeom, materials.silverMetal);
+            sp.position.set(x, 0.14 + cellR, -dir * (cellLen / 2 + 0.08 + k * 0.1));
+            holder.add(sp);
+          }
+        });
+        // Kırmızı (+) ve siyah (−) çıkış kabloları uç duvardan çıkar
+        const zEnd = wireSide * (D / 2);
+        [[0.35, materials.wireRed], [-0.35, materials.wireBlack]].forEach(([x, mat]) => {
+          const c = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(x, 0.35, zEnd),
+            new THREE.Vector3(x * 1.4, 0.3, zEnd + wireSide * 0.7),
+            new THREE.Vector3(x * 0.6, 0.25, zEnd + wireSide * 1.2)
+          ]);
+          holder.add(new THREE.Mesh(new THREE.TubeGeometry(c, 14, 0.055, 8, false), mat));
+        });
+        tagPart(holder, label, 'battery');
+        return holder;
+      }
+
+      function buildBatteryHolder() {
+        batteryGroup.position.y = 2.20;
+        batteryGroup.add(batteryLeftSubGroup, batteryRightSubGroup);
+        // İki adet 4'lü yuva alt katın ortasında arka arkaya (8 × AA = 12 V seri)
+        batteryLeftSubGroup.add(createSingle4xAAHolder(3.15, 'Ön 4×AA Pil Yuvası (6 V)', 1));
+        batteryRightSubGroup.add(createSingle4xAAHolder(-3.15, 'Arka 4×AA Pil Yuvası (6 V)', -1));
+      }
+
+      // -----------------------------------------------------------------------
+      // E) 4 ADET SARI TT REDÜKTÖRLÜ DC MOTOR VE MONTAJ BRAKETLERİ
+      // -----------------------------------------------------------------------
+      const motorSubGroups = [];
+
+      function createTTMotor(sideSign, zPos, label) {
+        const motorGroup = new THREE.Group();
+
+        // Sarı redüktör kutusu
+        const gearbox = new THREE.Mesh(
+          new THREE.BoxGeometry(1.88, 1.56, 3.05),
+          materials.ttYellow
+        );
+        gearbox.position.set(0, 0, 0.38);
+        gearbox.castShadow = true;
+        gearbox.receiveShadow = true;
+        motorGroup.add(gearbox);
+
+        // Redüktör ön yuvarlak dişli muhafazası
+        const frontDrum = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.78, 0.78, 1.88, 24),
+          materials.ttYellow
+        );
+        frontDrum.rotation.z = Math.PI / 2;
+        frontDrum.position.set(0, 0, 1.80);
+        frontDrum.castShadow = true;
+        motorGroup.add(frontDrum);
+
+        // Beyaz çift taraflı çıkış mili
+        const shaft = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.24, 0.24, 3.35, 18),
+          materials.whiteNylon
+        );
+        shaft.rotation.z = Math.PI / 2;
+        shaft.position.set(sideSign * 0.45, 0, 1.80);
+        motorGroup.add(shaft);
+
+        // Metalik 130 DC motor gövdesi (arka tarafa doğru)
+        const dcCan = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.76, 0.76, 2.05, 24),
+          materials.silverMetal
+        );
+        dcCan.rotation.x = Math.PI / 2;
+        dcCan.position.set(0, 0, -2.12);
+        dcCan.castShadow = true;
+        motorGroup.add(dcCan);
+
+        // Koyu gri plastik motor arka kapağı ve bakır lehim terminalleri
+        const endCap = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.82, 0.82, 0.9, 24),
+          materials.clearPlastic
+        );
+        endCap.rotation.x = Math.PI / 2;
+        endCap.position.set(0, 0, -3.22);
+        motorGroup.add(endCap);
+
+        [-0.30, 0.30].forEach((offsetX, i) => {
+          const lug = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.05, 0.28), materials.copper);
+          lug.position.set(offsetX, 0.20, -3.40);
+          motorGroup.add(lug);
+
+          // Motor uçlarından şasi merkezine kıvrılan kırmızı ve siyah kablolar
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(offsetX, 0.20, -3.48),
+            new THREE.Vector3(offsetX - sideSign * 0.55, 0.45, -3.95),
+            new THREE.Vector3(-sideSign * 1.25, 0.18, -3.70)
+          ]);
+          const wire = new THREE.Mesh(
+            new THREE.TubeGeometry(curve, 12, 0.04, 8, false),
+            i === 0 ? materials.wireRed : materials.wireBlack
+          );
+          motorGroup.add(wire);
+        });
+
+        // Akrilik montaj braketi (T-tipi şeffaf/siyah sabitleme parçası)
+        const bracket = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22, 1.95, 0.80),
+          materials.blackAcrylic
+        );
+        bracket.position.set(-sideSign * 1.04, 0.12, 0.20);
+        motorGroup.add(bracket);
+
+        // Ön motorlar +Z yönüne, arka motorlar -Z yönüne bakacak şekilde yönlendir
+        if (zPos < 0) {
+          motorGroup.rotation.y = Math.PI;
+        }
+
+        const basePos = new THREE.Vector3(sideSign * 4.25, 3.25, zPos > 0 ? 4.25 : -4.25);
+        motorGroup.position.copy(basePos);
+        motorGroup.userData.basePos = basePos.clone();
+        motorGroup.userData.sideSign = sideSign;
+
+        tagPart(motorGroup, label, 'motor');
+        motorsGroup.add(motorGroup);
+        motorSubGroups.push(motorGroup);
+      }
+
+      function buildMotors() {
+        createTTMotor( 1,  1, 'Sol Ön TT Redüktörlü DC Motor');
+        createTTMotor(-1,  1, 'Sağ Ön TT Redüktörlü DC Motor');
+        createTTMotor( 1, -1, 'Sol Arka TT Redüktörlü DC Motor');
+        createTTMotor(-1, -1, 'Sağ Arka TT Redüktörlü DC Motor');
+      }
+
+      // -----------------------------------------------------------------------
+      // F) 4 ADET 65mm DİŞLİ KAUÇUK TEKERLEK VE 5 KOLLU SARI JANT (Görseldeki Tasarım)
+      // -----------------------------------------------------------------------
+      const wheelMeshes = [];
+
+      function createWheel(sideSign, zPos, label) {
+        const wheelPivot = new THREE.Group();
+        const wheelSpin = new THREE.Group();
+        wheelPivot.add(wheelSpin);
+
+        const outerR = 3.25;
+        const innerR = 2.42;
+        const tireW  = 2.65;
+
+        // 1. Yumuşak omuzlu kauçuk lastik gövdesi (LatheGeometry ile yanak ve sırt kavisi)
+        const profile = [
+          new THREE.Vector2(innerR, -tireW / 2),
+          new THREE.Vector2(outerR - 0.24, -tireW / 2),
+          new THREE.Vector2(outerR - 0.06, -tireW / 2 + 0.14),
+          new THREE.Vector2(outerR, -tireW / 2 + 0.36),
+          new THREE.Vector2(outerR,  tireW / 2 - 0.36),
+          new THREE.Vector2(outerR - 0.06,  tireW / 2 - 0.14),
+          new THREE.Vector2(outerR - 0.24,  tireW / 2),
+          new THREE.Vector2(innerR,  tireW / 2)
+        ];
+        const tireGeom = new THREE.LatheGeometry(profile, 48);
+        tireGeom.rotateZ(Math.PI / 2);
+        const tireMesh = new THREE.Mesh(tireGeom, materials.rubberTire);
+        tireMesh.castShadow = true;
+        tireMesh.receiveShadow = true;
+        wheelSpin.add(tireMesh);
+
+        // 2. Görseldeki gibi kanallı 3 sıralı blok lastik sırt deseni (merkez + sağ/sol omuz blokları)
+        const treadCount = 18;
+        const centerBlockGeom = new THREE.BoxGeometry(0.76, 0.14, 0.78);
+        const sideBlockGeom   = new THREE.BoxGeometry(0.58, 0.13, 0.72);
+
+        for (let i = 0; i < treadCount; i++) {
+          const angle = (i / treadCount) * Math.PI * 2;
+          const halfStep = Math.PI / treadCount;
+
+          // Merkez sırt bloğu
+          const cBlock = new THREE.Mesh(centerBlockGeom, materials.rubberTire);
+          cBlock.position.set(
+            0,
+            Math.cos(angle) * (outerR + 0.03),
+            Math.sin(angle) * (outerR + 0.03)
+          );
+          cBlock.rotation.x = -angle;
+          cBlock.rotation.y = 0.14;
+          cBlock.castShadow = true;
+
+          // Sağ ve sol omuz sırt blokları (kanallı aralıklarla)
+          const sBlockR = new THREE.Mesh(sideBlockGeom, materials.rubberTire);
+          sBlockR.position.set(
+            0.78,
+            Math.cos(angle + halfStep) * (outerR - 0.01),
+            Math.sin(angle + halfStep) * (outerR - 0.01)
+          );
+          sBlockR.rotation.x = -(angle + halfStep);
+          sBlockR.rotation.z = -0.14;
+          sBlockR.castShadow = true;
+
+          const sBlockL = new THREE.Mesh(sideBlockGeom, materials.rubberTire);
+          sBlockL.position.set(
+            -0.78,
+            Math.cos(angle + halfStep) * (outerR - 0.01),
+            Math.sin(angle + halfStep) * (outerR - 0.01)
+          );
+          sBlockL.rotation.x = -(angle + halfStep);
+          sBlockL.rotation.z = 0.14;
+          sBlockL.castShadow = true;
+
+          wheelSpin.add(cBlock, sBlockR, sBlockL);
+        }
+
+        // 3. Parlak sarı iç jant tamburu ve kalın dış jant dudağı
+        const rimBarrelGeom = new THREE.CylinderGeometry(innerR + 0.02, innerR + 0.02, tireW - 0.16, 40, 1, true);
+        rimBarrelGeom.rotateZ(Math.PI / 2);
+        const rimBarrel = new THREE.Mesh(rimBarrelGeom, materials.ttYellow);
+        wheelSpin.add(rimBarrel);
+
+        const outerLipGeom = new THREE.TorusGeometry(innerR - 0.10, 0.18, 16, 40);
+        outerLipGeom.rotateY(Math.PI / 2);
+        const outerLip = new THREE.Mesh(outerLipGeom, materials.ttYellow);
+        outerLip.position.x = sideSign * (tireW / 2 - 0.16);
+
+        const innerLip = outerLip.clone();
+        innerLip.position.x = -sideSign * (tireW / 2 - 0.16);
+        wheelSpin.add(outerLip, innerLip);
+
+        // 4. Derin gömülü 5 kollu yıldız jant yüzü (ExtrudeGeometry ile geniş tabanlı kollar)
+        const spokeFaceShape = new THREE.Shape();
+        const starOuterR = innerR - 0.12;
+        const starRootR  = 0.95;
+
+        for (let s = 0; s < 5; s++) {
+          const centerA = (s / 5) * Math.PI * 2;
+          // Fotoğraftaki gibi: kollar göbekte ince, janta doğru genişler
+          const rootHalfAngle = 0.30;
+          const tipHalfAngle  = 0.21;
+
+          const a1 = centerA - rootHalfAngle;
+          const a2 = centerA - tipHalfAngle;
+          const a3 = centerA + tipHalfAngle;
+          const a4 = centerA + rootHalfAngle;
+
+          const p1x = Math.cos(a1) * starRootR,  p1y = Math.sin(a1) * starRootR;
+          const p2x = Math.cos(a2) * starOuterR, p2y = Math.sin(a2) * starOuterR;
+          const p3x = Math.cos(a3) * starOuterR, p3y = Math.sin(a3) * starOuterR;
+          const p4x = Math.cos(a4) * starRootR,  p4y = Math.sin(a4) * starRootR;
+
+          if (s === 0) {
+            spokeFaceShape.moveTo(p1x, p1y);
+          } else {
+            spokeFaceShape.lineTo(p1x, p1y);
+          }
+          spokeFaceShape.lineTo(p2x, p2y);
+          spokeFaceShape.lineTo(p3x, p3y);
+          spokeFaceShape.lineTo(p4x, p4y);
+        }
+        spokeFaceShape.closePath();
+
+        // Merkezi D-şaft yuvası boşluğu
+        const centerBore = new THREE.Path();
+        centerBore.absarc(0, 0, 0.34, 0, Math.PI * 2, true);
+        spokeFaceShape.holes.push(centerBore);
+
+        const spokeFaceGeom = new THREE.ExtrudeGeometry(spokeFaceShape, {
+          depth: 0.34,
+          bevelEnabled: true,
+          bevelSegments: 2,
+          steps: 1,
+          bevelSize: 0.04,
+          bevelThickness: 0.04
+        });
+        // Extrude Z ekseninden jant X eksenine yönlendir
+        spokeFaceGeom.rotateY(Math.PI / 2);
+        const spokeFace = new THREE.Mesh(spokeFaceGeom, materials.ttYellow);
+        spokeFace.position.x = sideSign * 0.24 - 0.17;
+        spokeFace.castShadow = true;
+        spokeFace.receiveShadow = true;
+        wheelSpin.add(spokeFace);
+
+        // 5. Görseldeki 5 adet kalıp pim/bijon çıkıntısı ve merkezi göbek çemberi
+        const pinGeom = new THREE.CylinderGeometry(0.075, 0.075, 0.44, 12);
+        pinGeom.rotateZ(Math.PI / 2);
+        for (let s = 0; s < 5; s++) {
+          const a = (s / 5) * Math.PI * 2;
+          const pin = new THREE.Mesh(pinGeom, materials.ttYellow);
+          pin.position.set(
+            sideSign * 0.26,
+            Math.sin(a) * 1.48,
+            Math.cos(a) * 1.48
+          );
+          wheelSpin.add(pin);
+        }
+
+        // Merkezi yükseltilmiş jant göbek halkası ve sarı orta kapak
+        const hubRingGeom = new THREE.TorusGeometry(0.62, 0.14, 12, 28);
+        hubRingGeom.rotateY(Math.PI / 2);
+        const hubRing = new THREE.Mesh(hubRingGeom, materials.ttYellow);
+        hubRing.position.x = sideSign * 0.44;
+
+        const innerSleeveGeom = new THREE.CylinderGeometry(0.56, 0.56, 1.35, 24);
+        innerSleeveGeom.rotateZ(Math.PI / 2);
+        const innerSleeve = new THREE.Mesh(innerSleeveGeom, materials.ttYellow);
+        innerSleeve.position.x = -sideSign * 0.15;
+
+        const centerCapGeom = new THREE.CylinderGeometry(0.36, 0.36, 0.42, 20);
+        centerCapGeom.rotateZ(Math.PI / 2);
+        const centerCap = new THREE.Mesh(centerCapGeom, materials.ttYellow);
+        centerCap.position.x = sideSign * 0.34;
+
+        wheelSpin.add(hubRing, innerSleeve, centerCap);
+
+        const basePos = new THREE.Vector3(sideSign * 7.65, 3.25, zPos);
+        wheelPivot.position.copy(basePos);
+        wheelPivot.userData.basePos = basePos.clone();
+        wheelPivot.userData.sideSign = sideSign;
+        wheelPivot.userData.spinGroup = wheelSpin;
+
+        tagPart(wheelPivot, label, 'wheel');
+        wheelsGroup.add(wheelPivot);
+        wheelMeshes.push(wheelPivot);
+      }
+
+      function buildWheels() {
+        createWheel( 1,  6.4, 'Sol Ön Tekerlek (65mm Kauçuk Tekerlek, Sarı Jant)');
+        createWheel(-1,  6.4, 'Sağ Ön Tekerlek (65mm Kauçuk Tekerlek, Sarı Jant)');
+        createWheel( 1, -6.4, 'Sol Arka Tekerlek (65mm Kauçuk Tekerlek, Sarı Jant)');
+        createWheel(-1, -6.4, 'Sağ Arka Tekerlek (65mm Kauçuk Tekerlek, Sarı Jant)');
+      }
+
+      // Tüm parçaları sahneye inşa et
+      buildBottomDeck();
+      buildTopDeck();
+      buildStandoffsAndScrews();
+      buildBatteryHolder();
+      buildMotors();
+      buildWheels();
+
+      // -----------------------------------------------------------------------
+      // G) ELEKTRONİK: ARDUINO MEGA 2560, L293D SHIELD, 6× HC-SR04, BUZZER, KABLOLAR
+      // -----------------------------------------------------------------------
+      const TOP_Y = 6.41;
+      const electronicsGroup = new THREE.Group();
+      const sensorGroup = new THREE.Group();
+      const driverGroup = new THREE.Group();
+      const lowerWires = new THREE.Group();
+      const upperWires = new THREE.Group();
+      robotGroup.add(electronicsGroup, sensorGroup, driverGroup, lowerWires, upperWires);
+      scene.add(keyLight.target);
+
+      function addBox(parent, w, h, dd, mat, x, y, z) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), mat);
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        parent.add(m);
+        return m;
+      }
+      function addCyl(parent, r, h, mat, x, y, z, axis, seg) {
+        const g = new THREE.CylinderGeometry(r, r, h, seg || 20);
+        if (axis === 'x') g.rotateZ(Math.PI / 2);
+        if (axis === 'z') g.rotateX(Math.PI / 2);
+        const m = new THREE.Mesh(g, mat);
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        parent.add(m);
+        return m;
+      }
+      function addWire(parent, pts, mat, r) {
+        const curve = new THREE.CatmullRomCurve3(pts.map((q) => new THREE.Vector3(q[0], q[1], q[2])));
+        const m = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, r || 0.05, 8, false), mat);
+        m.castShadow = true;
+        parent.add(m);
+        return m;
+      }
+
+      // Gerçek fotoğraflardan yüzey kaplamaları (img/ klasöründe)
+      const texLoader = new THREE.TextureLoader();
+      function photoMat(url, rough) {
+        const t = texLoader.load(url);
+        t.encoding = THREE.sRGBEncoding;
+        t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        return new THREE.MeshStandardMaterial({ map: t, roughness: rough || 0.55, metalness: 0.08 });
+      }
+      function photoPlane(parent, mat, w, h, x, y, z, horizontal) {
+        const g = new THREE.PlaneGeometry(w, h);
+        if (horizontal) g.rotateX(-Math.PI / 2);
+        const m = new THREE.Mesh(g, mat);
+        m.position.set(x, y, z);
+        m.receiveShadow = true;
+        parent.add(m);
+        return m;
+      }
+      const MAT_PHOTO = {
+        mega: photoMat('img/tex-mega.jpg'),
+        shield: photoMat('img/tex-shield.jpg'),
+        sonar: photoMat('img/tex-hcsr04.jpg'),
+        sonarCap: photoMat('img/tex-sonar-cap.jpg', 0.4)
+      };
+
+      let shieldGroup = null;
+      const SHIELD_BASE_Y = TOP_Y + 1.35;
+      function buildArduino() {
+        // Arduino Mega 2560 (101,5 × 53,3 mm), USB arka tarafta
+        const g = new THREE.Group();
+        g.position.set(0, TOP_Y, -3.0);
+        [[-2.2, -4.6], [2.2, -4.6], [-2.2, 4.6], [2.2, 4.6]].forEach(([x, z]) => addCyl(g, 0.17, 0.35, materials.whiteNylon, x, 0.175, z));
+        addBox(g, 5.33, 0.16, 10.15, materials.pcbMega, 0, 0.43, 0);
+        const y0 = 0.51;
+        photoPlane(g, MAT_PHOTO.mega, 5.33, 10.15, 0, 0.512, 0, true);              // gerçek kart fotoğrafı
+        addBox(g, 1.45, 1.1, 1.6, materials.silverMetal, 1.12, y0 + 0.55, -4.75);    // USB-B
+        addBox(g, 0.9, 1.1, 1.4, materials.chipBlack, -1.97, y0 + 0.55, -4.6);       // DC jak
+        addBox(g, 0.25, 0.85, 8.6, materials.headerBlack, -2.5, y0 + 0.42, -0.2);    // kenar pinleri
+        addBox(g, 0.25, 0.85, 8.6, materials.headerBlack, 2.5, y0 + 0.42, -0.2);
+        addBox(g, 4.6, 0.85, 0.5, materials.headerBlack, 0.1, y0 + 0.42, 4.7);       // D22–D53 çift sıra
+        tagPart(g, 'Arduino Mega 2560 Kontrol Kartı', 'arduino');
+        electronicsGroup.add(g);
+
+        // L293D Motor Shield (HW-130): Mega'nın USB tarafındaki Uno uyumlu pinlere takılı
+        const sh = new THREE.Group();
+        sh.position.set(0, SHIELD_BASE_Y, -4.64);
+        addBox(sh, 5.33, 0.16, 6.86, materials.pcbShield, 0, 0.43, 0);
+        addBox(sh, 0.25, 0.5, 6.0, materials.headerBlack, -2.45, 0.1, 0);          // erkek pinler
+        addBox(sh, 0.25, 0.5, 6.0, materials.headerBlack, 2.45, 0.1, 0);
+        const y1 = 0.51;
+        photoPlane(sh, MAT_PHOTO.shield, 5.33, 6.86, 0, 0.512, 0, true);            // gerçek kart fotoğrafı
+        addBox(sh, 2.0, 0.32, 0.92, materials.chipBlack, 0.32, y1 + 0.16, -1.72);    // L293D
+        addBox(sh, 2.08, 0.32, 0.95, materials.chipBlack, 0.11, y1 + 0.16, -0.07);   // 74HC595
+        addBox(sh, 2.0, 0.32, 0.92, materials.chipBlack, 0.05, y1 + 0.16, 1.72);     // L293D
+        addBox(sh, 2.56, 0.9, 0.8, materials.terminalBlue, -0.75, y1 + 0.45, -3.04); // M1 / M2
+        addBox(sh, 2.56, 0.9, 0.8, materials.terminalBlue, -0.08, y1 + 0.45, 2.98);  // M3 / M4
+        addBox(sh, 0.82, 0.9, 1.06, materials.terminalBlue, -2.18, y1 + 0.45, -1.58); // EXT_PWR
+        [[-1.27, -1.72], [-1.43, 0.41], [1.6, 2.4], [1.6, -2.2], [1.06, -0.89]].forEach(([cx, cz]) =>
+          addCyl(sh, 0.3, 0.7, materials.darkGrayPlastic, cx, y1 + 0.35, cz));      // elektrolitik kondansatörler
+        tagPart(sh, 'L293D Motor Sürücü Shield (HW-130)', 'shield');
+        electronicsGroup.add(sh);
+        shieldGroup = sh;
+      }
+
+      // 6 adet sabit HC-SR04: önde 1, arkada 1, solda 2, sağda 2
+      const sonarUnits = [];
+      const sonarConeGeom = new THREE.ConeGeometry(Math.tan(THREE.MathUtils.degToRad(15)) * 40, 40, 40, 1, true);
+      sonarConeGeom.rotateX(-Math.PI / 2);
+      sonarConeGeom.translate(0, 0, 20);
+
+      function createSonar(name, x, z, yaw, withServo) {
+        const root = new THREE.Group();
+        root.position.set(x, TOP_Y, z);
+        root.rotation.y = yaw;
+        let g = root;
+        let pan = null;
+        if (withServo) {
+          // SG90 mikro servo: gövde plakada, mil yukarıda; sensör servo koluyla döner
+          const servo = new THREE.Group();
+          addBox(servo, 2.3, 2.2, 1.2, materials.servoBlue, -0.55, 1.1, 0);
+          addBox(servo, 3.3, 0.22, 1.2, materials.servoBlue, -0.55, 1.65, 0);
+          addCyl(servo, 0.55, 0.35, materials.servoBlue, 0, 2.37, 0);
+          addCyl(servo, 0.2, 0.3, materials.whiteNylon, 0, 2.65, 0);
+          tagPart(servo, 'SG90 Mikro Servo Motor', 'servo');
+          root.add(servo);
+          pan = new THREE.Group();
+          pan.position.y = 2.8;
+          addBox(pan, 2.4, 0.12, 0.5, materials.whiteNylon, 0, -0.06, 0);
+          root.add(pan);
+          g = pan;
+        }
+
+        const bracket = new THREE.Group();
+        addBox(bracket, 3.0, 0.15, 1.4, materials.blackAcrylic, 0, 0.075, 0.1);
+        addBox(bracket, 4.8, 2.3, 0.15, materials.blackAcrylic, 0, 1.3, 0.62);
+        tagPart(bracket, 'Sensör Braketi (' + name + ')', 'bracket');
+        g.add(bracket);
+
+        const sensor = new THREE.Group();
+        addBox(sensor, 4.5, 2.0, 0.16, materials.pcbBlue, 0, 1.3, 0.78);
+        photoPlane(sensor, MAT_PHOTO.sonar, 4.5, 2.0, 0, 1.3, 0.862, false);      // gerçek sensör fotoğrafı
+        [-1.36, 1.39].forEach((sx) => {
+          addCyl(sensor, 0.83, 1.2, materials.silverMetal, sx, 1.3, 1.46, 'z', 28);
+          const cap = new THREE.Mesh(new THREE.CircleGeometry(0.83, 36), MAT_PHOTO.sonarCap);
+          cap.position.set(sx, 1.3, 2.065);
+          sensor.add(cap);
+        });
+        addBox(sensor, 0.9, 0.35, 0.3, materials.silverMetal, 0, 2.0, 1.0);
+        tagPart(sensor, 'HC-SR04 Ultrasonik Sensör — ' + name, 'hcsr04');
+        g.add(sensor);
+
+        const cone = new THREE.Mesh(sonarConeGeom, materials.sonarCone);
+        cone.position.set(0, 1.3, 2.1);
+        cone.visible = false;
+        cone.renderOrder = 4;
+        g.add(cone);
+
+        sensorGroup.add(root);
+        sonarUnits.push({
+          name, group: root, pan, cone, yaw, dist: Infinity, lift: withServo ? 2.8 : 0,
+          base: root.position.clone(),
+          dir: new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw))
+        });
+      }
+
+      function buildSensor() {
+        // 6 sensör: önde 1, arkada 1, her yanda 2 (yan sensörler gövdenin ön ve arka uçlarına yakın)
+        createSonar('Ön', 0, 8.4, 0, false);
+        createSonar('Arka', 0, -9.3, Math.PI, false);
+        createSonar('Sol ön', 4.0, 6.4, Math.PI / 2, false);
+        createSonar('Sol arka', 4.0, -6.6, Math.PI / 2, false);
+        createSonar('Sağ ön', -4.0, 6.4, -Math.PI / 2, false);
+        createSonar('Sağ arka', -4.0, -6.6, -Math.PI / 2, false);
+      }
+
+      function buildBuzzer() {
+        // Çıplak aktif buzzer (2 bacaklı): bacaklar üst plakadaki deliklerden geçer
+        const g = new THREE.Group();
+        g.position.set(-1.8, TOP_Y, 5.4);
+        addCyl(g, 0.6, 0.9, materials.buzzerBody, 0, 0.5, 0, null, 32);
+        addCyl(g, 0.13, 0.03, materials.headerBlack, 0, 0.96, 0, null, 16);         // ses deliği
+        [-0.25, 0.25].forEach((x) => addCyl(g, 0.03, 0.12, materials.silverMetal, x, 0.02, 0, null, 8));
+        tagPart(g, 'Aktif Buzzer', 'buzzer');
+        electronicsGroup.add(g);
+      }
+
+      function buildWiring() {
+        // Motorlar: shield klemensleri (M1–M4) → üst plakadaki orta delik → motorlar
+        // M1 sağ ön, M2 sağ arka (−X), M3 sol ön, M4 sol arka (+X)
+        [1, -1].forEach((sx) => {
+          [['front', -3.6], ['rear', -5.1]].forEach(([which, zt], mi) => {
+            [[0, materials.wireRed], [1, materials.wireBlack]].forEach(([i, mat]) => {
+              const o = i * 0.22;
+              const hx = sx * (0.25 + (mi * 2 + i) * 0.12);
+              // Sağ motorlar M1/M2 (arkadaki klemens), sol motorlar M3/M4 (öndeki klemens)
+              const blockZ = sx < 0 ? -7.68 : -1.66;
+              const kx = (sx < 0 ? -0.75 : -0.08) + ((mi === 0 ? 0 : 3) + i - 2) * 0.51;
+              const pts = [
+                [kx, 9.2, blockZ],
+                [kx, 9.9, blockZ + 0.9],
+                [sx * 0.6 + hx * 0.3, 9.7, 1.4],
+                [hx, 6.25, 2.7],
+                [sx * 1.6, 4.6, 2.0 - mi * 0.3]
+              ];
+              if (which === 'front') pts.push([sx * (3.0 + o * 0.5), 3.43, 0.55]);
+              else pts.push([sx * 3.05, 4.0, -0.3], [sx * (3.75 + o * 0.5), 3.5, -0.9]);
+              addWire(upperWires, pts, mat, 0.045);
+            });
+          });
+        });
+
+        // Piller: iki yuva seri (12 V) → shield EXT_PWR
+        addWire(lowerWires, [[-0.21, 2.45, 7.25], [-0.6, 4.2, 6.0], [-0.6, 4.25, 0], [-0.6, 4.2, -6.0], [-0.3, 2.6, -7.0]], materials.wireBlack, 0.05);   // seri bağlantı (ön − → arka +)
+        [[0, materials.wireRed], [1, materials.wireBlack]].forEach(([i, mat]) => {
+          const o = i * 0.15;
+          addWire(upperWires, [[(i === 0 ? 0.2 : -0.2), 2.45, -7.2], [0.2 + o, 4.6, -7.9], [0.4 + o, 6.25, -8.6], [0.3 + o, 9.0, -8.4], [-1.4, 9.6, -7.2], [-2.3 + o * 1.6, 9.25, -6.22]], mat, 0.05);
+        });
+
+        // Sensörler ve buzzer → Mega'nın D22–D53 çift sıra başlığı (renkli jumper kablolar)
+        const HEADER_Z = 1.6;
+        const step = 4.3 / 26;
+        let slot = 0;
+        const nextX = () => -2.15 + (slot++) * step;
+        const sMats = [materials.wireRed, materials.wireGreen, materials.wireYellow, materials.wireBlack];
+        ['Sağ arka', 'Sağ ön', 'Ön', 'Arka', 'Sol ön', 'Sol arka'].forEach((name) => {
+          const u = sonarUnits.find((v) => v.name === name);
+          const P = u.base;
+          const F = u.dir;
+          const perp = new THREE.Vector3(F.z, 0, -F.x);
+          sMats.forEach((mat, i) => {
+            const o = (i - 1.5) * 0.12;
+            const ex = nextX();
+            const s0 = [P.x + F.x * 0.45 + perp.x * o, P.y + u.lift + 1.0, P.z + F.z * 0.45 + perp.z * o];
+            const s1 = [P.x - F.x * 0.6 + perp.x * o, P.y + u.lift + 1.9, P.z - F.z * 0.6 + perp.z * o];
+            addWire(upperWires, [s0, s1, [(s1[0] + ex) / 2, 9.6 + u.lift * 0.5, (s1[2] + HEADER_Z) / 2], [ex, 7.9, HEADER_Z]], mat, 0.035);
+            addBox(upperWires, 0.18, 0.55, 0.18, materials.headerBlack, ex, 8.15, HEADER_Z);
+          });
+        });
+        [materials.wireRed, materials.wireBlack].forEach((mat, i) => {
+          const x = -1.9 + i * 0.2;
+          const ex = nextX();
+          addWire(upperWires, [[x, TOP_Y + 0.15, 4.75], [x * 0.8, 8.7, 2.9], [ex, 7.9, HEADER_Z]], mat, 0.035);
+          addBox(upperWires, 0.18, 0.55, 0.18, materials.headerBlack, ex, 8.15, HEADER_Z);
+        });
+
+        tagPart(lowerWires, 'Pil Seri Bağlantı Kablosu', 'wiring');
+        tagPart(upperWires, 'Renkli Jumper ve Motor Kabloları', 'wiring');
+      }
+
+      buildArduino();
+      buildSensor();
+      buildBuzzer();
+      buildWiring();
+
+      // -----------------------------------------------------------------------
+      // H) SÜRÜŞ ALANI: ZEMİN IZGARASI VE ENGELLER
+      // -----------------------------------------------------------------------
+      const worldGroup = new THREE.Group();
+      worldGroup.visible = false;
+      scene.add(worldGroup);
+      const floorGrid = new THREE.GridHelper(256, 64, 0x94a3b8, 0xd3dbe5);
+      floorGrid.position.y = 0.01;
+      worldGroup.add(floorGrid);
+
+      // -----------------------------------------------------------------------
+      // J) KENDİ ÖLÇEN VE KARAR VEREN OTOMATİK PARK SİSTEMİ
+      //    Robot otoparkın düzenini bilmez. Koridorda ilerlerken yan sensörlerle
+      //    boşlukları ölçer, kurallara göre park türüne kendisi karar verir.
+      //    Birimler cm; heading 0 = +Z (koridor yönü), ileri = (sin h, cos h)
+      //    Sol = +X (dikey park yerleri), Sağ = −X (kaldırım, paralel park)
+      // -----------------------------------------------------------------------
+      const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+      const clampN = (v, m) => Math.max(-m, Math.min(m, v));
+      const PARK_START = { x: 0, z: -112, h: 0 };
+      const LANE_X = 0;
+      const PERP_R = 22;            // dikey park dönüş yarıçapı
+      const PAR_THETA = Math.PI * 70 / 180; // paralel park kırma açısı (70°)
+      const PAR_ZOFF = 4;
+      const PAR_IN = 1;      // park bitince gövde şerit çizgisinin içinde kalır
+      const STOP_CM = 6;
+      const SIDE_Z = 6.4;            // yan ön sensörlerin araç ortasına göre boyuna konumu (uca yakın)
+      const SCAN_END_Z = 92;
+      // Karar kuralları (gerçek araçta da aynı eşikler kullanılabilir)
+      const RULES = {
+        leftOpen: 47,     // sol sensör bu değerden uzunsa yer boş
+        rightOpen: 20,    // sağ sensör bu değerden uzunsa kaldırımda boşluk var
+        perpMinWidth: 26, // dikey yer en az: araç genişliği 18 + 2×4 cm
+        perpMinDepth: 55, // sensörden arka engele en az mesafe
+        duzMinWidth: 41,  // bu genişlik ve üstü → düz park (geniş yer), altı → geri park (dar yer)
+        parMinLen: 50     // paralel boşluk en az (araç boyu 23 cm)
+      };
+
+      // ---- Rastgele otopark üretici (sahne ve simülasyon aynı veriyi kullanır)
+      function mulberry32(a) {
+        return function () {
+          a |= 0; a = a + 0x6D2B79F5 | 0;
+          let t = Math.imul(a ^ a >>> 15, 1 | a);
+          t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+      }
+      const BAY_ZS = [-45, -15, 15, 45, 75];
+      const PROB = { car: 0.58, empty: 0.32, offset: 4, small: 0.55, medium: 0.25 };
+      function makeLot(seed) {
+        const rnd = mulberry32(seed);
+        const lot = { seed, bays: [], parCars: [], boxes: [] };
+        const add = (kind, x, z, w, d, h) => lot.boxes.push({ kind, x, z, w, d, h, minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+        // Sabit yapılar
+        add('wall', 70, 15, 4, 150, 14);           // dikey yerlerin arka duvarı (iç yüz x=68)
+        add('block', 51, -94, 38, 68, 14);         // park sırası başlangıcı
+        add('block', 51, 109, 38, 38, 14);         // park sırası sonu
+        add('curb', -44, 0, 4, 256, 10);           // kaldırım (iç yüz x=−42); park şeridi çizgisi x=−16
+        // Dikey park yerleri
+        BAY_ZS.forEach((z) => {
+          const r = rnd();
+          const state = r < PROB.car ? 'car' : r < PROB.car + PROB.empty ? 'empty' : 'shallow';
+          lot.bays.push({ z, state });
+          // Araçlar her zaman tam ortada ve aynı genişlikte değil: boşluk genişlikleri değişir
+          if (state === 'car') add('car', 50, z + (rnd() - 0.5) * 2 * PROB.offset, 23, 16 + rnd() * 4, 10);
+          if (state === 'shallow') add('bin', 62, z, 12, 14, 12);
+        });
+        // Kaldırım boyunca paralel park etmiş araçlar ve aralarındaki boşluklar
+        let cur = -104 + rnd() * 8;
+        while (cur < 100) {
+          lot.parCars.push(cur + 11.5);
+          add('car', -29, cur + 11.5, 18, 23, 10);  // şeridin ortasında
+          cur += 23;
+          const r = rnd();
+          cur += r < PROB.small ? 8 + rnd() * 8 : r < PROB.small + PROB.medium ? 36 + rnd() * 10 : 52 + rnd() * 8;
+        }
+        // En az bir uygun yer olsun
+        const hasPerp = lot.bays.some((b) => b.state === 'empty');
+        const hasPar = lot.parCars.some((z, i) => i > 0 && z - lot.parCars[i - 1] - 23 >= RULES.parMinLen + 1);
+        if (!hasPerp && !hasPar) {
+          const b = lot.bays[1 + Math.floor(rnd() * 3)];
+          lot.boxes = lot.boxes.filter((o) => !((o.kind === 'car' || o.kind === 'bin') && o.x > 30 && Math.abs(o.z - b.z) < 8));
+          b.state = 'empty';
+        }
+        return lot;
+      }
+
+      function parkPlanAuto() {
+        return [
+          { type: 'turn', h: 0, label: 'Koridora hizalanıyor' },
+          { type: 'scan', speed: 18, label: 'İki yan sensörle park yeri aranıyor' }
+        ];
+      }
+
+      // Karar verildikten sonra uygulanacak manevra
+      function maneuverSteps(dec) {
+        if (dec.type === 'duz') {
+          return [
+            { type: 'lineTo', z: dec.c - PERP_R, speed: 16, label: 'Dönüş noktasına geri gelindi' },
+            { type: 'arc', h: Math.PI / 2, R: PERP_R, speed: 14, label: 'Burunla park yerine giriliyor' },
+            { type: 'line', h: Math.PI / 2, px: 0, pz: dec.c, speed: 16, slow: (P, son) => Math.max(4, (son('Ön') - STOP_CM) * 1.2), until: (P, son) => son('Ön') <= STOP_CM, label: 'Ön sensörle duvara yaklaşılıyor' }
+          ];
+        }
+        if (dec.type === 'geri') {
+          return [
+            { type: 'lineTo', z: dec.c + PERP_R, speed: 16, label: 'Park yerinin önünden geçiliyor' },
+            { type: 'wait', dur: 0.5, label: 'Geri vitese geçiliyor' },
+            { type: 'arc', h: -Math.PI / 2, R: PERP_R, rev: true, speed: 13, label: 'Geri geri park yerine dönülüyor' },
+            { type: 'line', h: -Math.PI / 2, px: 0, pz: dec.c, rev: true, speed: 14, slow: (P, son) => Math.max(4, (son('Arka') - STOP_CM) * 1.2), until: (P, son) => son('Arka') <= STOP_CM, label: 'Arka sensörle duvara yaklaşılıyor' }
+          ];
+        }
+        return [
+          { type: 'lineTo', z: dec.zStart, speed: 14, label: 'Öndeki aracın hizasına gelindi' },
+          { type: 'wait', dur: 0.5, label: 'Geri vitese geçiliyor' },
+          { type: 'arc', h: PAR_THETA, R: dec.R, rev: true, speed: 12, guard: 14, label: 'Arka kaldırıma doğru kırılıyor' },
+          { type: 'arc', h: 0, R: dec.R, rev: true, speed: 12, label: 'Direksiyon karşıya, araç düzleşiyor',
+            // Arka sensör burada arkadaki araca zaten yaklaşır: taramada ölçülen araca/kaldırıma göre beklenen
+            // mesafeden belirgin kısa bir ölçüm, yeni bir engel demektir
+            expect: (P) => {
+              const ox = P.x - 11.4 * Math.sin(P.h), oz = P.z - 11.4 * Math.cos(P.h);
+              let e = 400;
+              if (Math.cos(P.h) > 0.05) e = Math.min(e, (oz - dec.g0) / Math.cos(P.h));
+              if (Math.sin(P.h) > 0.05) e = Math.min(e, (ox - dec.curbX) / Math.sin(P.h));
+              return e;
+            } },
+          { type: 'center', h: 0, label: 'Ön ve arka sensörle ortalanıyor' },
+          { type: 'turn', h: 0, label: 'Son hizalama' }
+        ];
+      }
+
+      // Bir adımı çalıştırır: [v (cm/s), w (rad/s), bitti mi]
+      function runParkStep(st, P, dt, son, mem) {
+        st.t = (st.t || 0) + dt;
+        const ramp = (sp) => Math.min(sp, 4 + st.t * 40);
+        const laneW = (h, rev, px, pz) => {
+          const e = (P.x - px) * Math.cos(h) - (P.z - pz) * Math.sin(h);
+          const corr = clampN(0.08 * e, 0.35);
+          return clampN(3 * wrapA(h + (rev ? corr : -corr) - P.h), 1.0);
+        };
+        switch (st.type) {
+          case 'turn': {
+            const err = wrapA(st.h - P.h);
+            if (Math.abs(err) < 0.012) return [0, 0, true];
+            const w = clampN(3 * err, 1.4);
+            return [0, Math.sign(w) * Math.max(Math.abs(w), 0.15), false];
+          }
+          case 'arc': {
+            const err = wrapA(st.h - P.h);
+            if (st.sign0 === undefined) st.sign0 = Math.sign(err) || 1;
+            if (Math.abs(err) < 0.008 || Math.sign(err) !== st.sign0) return [0, 0, true];
+            const sp = Math.min(ramp(st.speed), Math.abs(err) * st.R * 4 + 1.5);
+            return [(st.rev ? -1 : 1) * sp, st.sign0 * sp / st.R, false];
+          }
+          case 'line': {
+            if (st.until(P, son, mem)) return [0, 0, true];
+            let sp = ramp(st.speed);
+            if (st.slow) sp = Math.min(sp, st.slow(P, son, mem));
+            return [(st.rev ? -1 : 1) * sp, laneW(st.h, st.rev, st.px, st.pz), false];
+          }
+          case 'lineTo': {
+            const dz = st.z - P.z;
+            if (Math.abs(dz) < 0.4) return [0, 0, true];
+            const rev = dz < 0;
+            const sp = Math.min(ramp(st.speed), Math.abs(dz) * 2 + 2);
+            return [(rev ? -1 : 1) * sp, laneW(0, rev, LANE_X, 0), false];
+          }
+          case 'center': {
+            const diff = son('Ön') - son('Arka');
+            if (Math.abs(diff) < 1.2) return [0, 0, true];
+            const v = clampN(diff * 0.8, 10);
+            return [Math.sign(v) * Math.max(Math.abs(v), 3), clampN(3 * wrapA(st.h - P.h), 0.8), false];
+          }
+          case 'wait':
+            return [0, 0, st.t >= st.dur];
+          case 'scan': {
+            if (!mem.L) { mem.L = { ph: 'seek' }; mem.R = { ph: 'seek' }; mem.log = []; }
+            const sL = son('Sol ön');
+            const sR = son('Sağ ön');
+            const zL = P.z - 4.0 * Math.sin(P.h) + SIDE_Z * Math.cos(P.h);
+            const zR = P.z + 4.0 * Math.sin(P.h) + SIDE_Z * Math.cos(P.h);
+            const log = (side, text, ok) => mem.log.push({ side, text, ok });
+
+            // SOL: dikey park yerleri
+            const A = mem.L;
+            const openL = sL > RULES.leftOpen;
+            if (A.ph === 'seek' && !openL) A.ph = 'closed';
+            else if (A.ph === 'closed' && openL) { A.ph = 'open'; A.g0 = zL; A.min = sL; A.best = null; A.d0 = null; }
+            else if (A.ph === 'open') {
+              // Boşluk içinde yeterince derin olan en uzun kesimi bul (kısmen engelli yerler için)
+              const deep = openL && sL >= RULES.perpMinDepth;
+              if (openL) A.min = Math.min(A.min, sL);
+              if (deep && A.d0 === null) { A.d0 = zL; A.dmin = sL; }
+              if (deep) A.dmin = Math.min(A.dmin, sL);
+              if (!deep && A.d0 !== null) {
+                const len = zL - A.d0;
+                if (!A.best || len > A.best.w) A.best = { w: len, c: (A.d0 + zL) / 2, depth: A.dmin };
+                A.d0 = null;
+              }
+              if (!openL) {
+                A.ph = 'closed';
+                const width = zL - A.g0;
+                const best = A.best;
+                if (width < 15) { /* araçlar arası küçük aralık: yok say */ }
+                else if (width < RULES.perpMinWidth) log('Sol', 'Boşluk ' + Math.round(width) + ' cm → çok dar', false);
+                else if (!best || best.w < RULES.perpMinWidth) log('Sol', 'Yer ' + Math.round(width) + ' cm ama derinlik ' + Math.round(A.min) + ' cm → sığ (engel var)', false);
+                else {
+                  const type = best.w >= RULES.duzMinWidth ? 'duz' : 'geri';
+                  log('Sol', 'Yer ' + Math.round(best.w) + ' cm, derinlik ' + Math.round(best.depth) + ' cm → ' + (type === 'duz' ? 'geniş (≥ ' + RULES.duzMinWidth + ' cm): DÜZ PARK' : 'dar (< ' + RULES.duzMinWidth + ' cm): GERİ PARK'), true);
+                  mem.decision = { type, c: best.c, width: best.w, depth: best.depth };
+                  return [0, 0, true];
+                }
+              }
+            }
+
+            // SAĞ: kaldırım boyunca paralel boşluk
+            const B = mem.R;
+            const openR = sR > RULES.rightOpen;
+            if (B.ph === 'seek' && !openR) B.ph = 'closed';
+            else if (B.ph === 'closed' && openR) { B.ph = 'open'; B.g0 = zR; }
+            if (openR) B.curbX = P.x - 6.1 - sR;   // boşlukta sağ sensör kaldırımı görür
+            else if (B.ph === 'open' && !openR) {
+              B.ph = 'closed';
+              const len = zR - B.g0;
+              if (len < 20) { /* araçlar arası küçük aralık: yok say */ }
+              else if (len < RULES.parMinLen) log('Sağ', 'Boşluk ' + Math.round(len) + ' cm → paralel için kısa', false);
+              else {
+                const carSideX = P.x - 6.1 - sR;
+                const targetX = carSideX - 9 + PAR_IN;
+                const shift = P.x - targetX;
+                const R = shift / (2 * (1 - Math.cos(PAR_THETA)));
+                log('Sağ', 'Boşluk ' + Math.round(len) + ' cm (≥ ' + RULES.parMinLen + ' cm) → PARALEL PARK', true);
+                mem.decision = { type: 'paralel', len, R, zStart: zR + PAR_ZOFF, g0: B.g0, curbX: B.curbX };
+                return [0, 0, true];
+              }
+            }
+
+            if (P.z > SCAN_END_Z) { mem.error = 'Uygun park yeri bulunamadı'; return [0, 0, true]; }
+            return [ramp(st.speed), laneW(0, false, LANE_X, 0), false];
+          }
+        }
+        return [0, 0, true];
+      }
+
+      // ---- Engel gelince dur, kalkınca devam et
+      //  Dönüşlerde: gidiş yönündeki sensör ENGEL_CM altına inerse dur (normalde en az ≈19 cm görür).
+      //  Düz gidişte ve duvara yaklaşırken: mesafe aracın hızından hızlı düşerse (biri önüne girdiyse) dur.
+      //  Engel kalktıktan sonra yol 1 sn açık kalırsa kaldığı yerden devam eder.
+      const ENGEL_CM = 16;   // dönüşlerde normalde en az ≈19 cm görülür
+      const ANI_DUSUS_CM = 3;
+      const ACIK_BEKLE_SN = 1.0;
+      function runParkStepSafe(st, P, dt, son, mem) {
+        const pz = mem.pause;
+        if (pz) {
+          const d = son(pz.sensor);
+          const clear = pz.mode === 'guard' ? d > pz.limit + 4 : d >= pz.ref - 2;
+          pz.clearT = clear ? pz.clearT + dt : 0;
+          pz.t += dt;
+          if (pz.clearT >= ACIK_BEKLE_SN) {
+            mem.pause = null;
+            mem.resumed = (mem.resumed || 0) + 1;
+            st.t = 0;          // yumuşak kalkış
+            mem.prevD = null;
+          }
+          return [0, 0, false];
+        }
+        const out = runParkStep(st, P, dt, son, mem);
+        const v = out[0];
+        if (out[2] || Math.abs(v) < 0.5) { mem.prevD = null; return out; }
+        const sensor = v > 0 ? 'Ön' : 'Arka';
+        const d = son(sensor);
+        let hit = null;
+        if (st.type === 'arc' && st.expect) {
+          const e = st.expect(P);
+          if (d < e - 4 || d < 3) hit = { mode: 'drop', ref: Math.min(e, 400) };
+        } else if (st.type === 'arc') {
+          const limit = st.guard !== undefined ? st.guard : ENGEL_CM;
+          if (d < limit) hit = { mode: 'guard', limit };
+        } else {
+          const prev = mem.prevD && mem.prevD.sensor === sensor ? mem.prevD.d : null;
+          if (prev !== null && prev - d - Math.abs(v) * dt > ANI_DUSUS_CM) hit = { mode: 'drop', ref: prev };
+          else if (d < 3) hit = { mode: 'guard', limit: 3 };
+        }
+        mem.prevD = { sensor, d };
+        if (hit) {
+          mem.pause = Object.assign({ sensor, d, clearT: 0, t: 0 }, hit);
+          mem.pauses = (mem.pauses || 0) + 1;
+          mem.prevD = null;
+          return [0, 0, false];
+        }
+        return out;
+      }
+
+
+      const obstacleMeshes = [];
+      const obstacleBoxes = [];
+      const LAYOUTS = {
+        free: { group: new THREE.Group(), meshes: [], boxes: [] },
+        park: { group: new THREE.Group(), meshes: [], boxes: [] }
+      };
+      worldGroup.add(LAYOUTS.free.group, LAYOUTS.park.group);
+
+      function addBlock(keys, parent, x, z, w, dd, h, color) {
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(w, h, dd),
+          new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.02 })
+        );
+        m.position.set(x, h / 2, z);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        parent.add(m);
+        const box = { minX: x - w / 2, maxX: x + w / 2, minZ: z - dd / 2, maxZ: z + dd / 2 };
+        keys.forEach((k) => { LAYOUTS[k].meshes.push(m); LAYOUTS[k].boxes.push(box); });
+        return m;
+      }
+
+      // Ortak dış duvarlar
+      [[0, 130, 264, 4], [0, -130, 264, 4], [130, 0, 4, 264], [-130, 0, 4, 264]].forEach(([x, z, w, dd]) =>
+        addBlock(['free', 'park'], worldGroup, x, z, w, dd, 16, 0xcbd5e1));
+
+      // Serbest alan engelleri
+      [
+        [0, 62, 34, 18, 20, 0xfbbf24],
+        [58, 18, 16, 40, 24, 0x7dd3fc],
+        [-52, -8, 26, 26, 16, 0xe2e8f0],
+        [-18, -66, 60, 14, 14, 0xfda4af],
+        [66, -58, 22, 22, 30, 0xe2e8f0],
+        [-70, 56, 20, 30, 22, 0x86efac],
+        [32, -26, 12, 12, 14, 0xc4b5fd]
+      ].forEach(([x, z, w, dd, h, color]) => addBlock(['free'], LAYOUTS.free.group, x, z, w, dd, h, color));
+
+      // ---------------- OTOPARK SAHNESİ (her seferinde rastgele düzen) ----------------
+      const PG = LAYOUTS.park.group;
+      const asphalt = new THREE.Mesh(
+        new THREE.PlaneGeometry(256, 256),
+        new THREE.MeshStandardMaterial({ color: 0x7d8693, roughness: 0.95, metalness: 0 })
+      );
+      asphalt.rotation.x = -Math.PI / 2;
+      asphalt.position.y = 0.02;
+      asphalt.receiveShadow = true;
+      PG.add(asphalt);
+
+      const paintMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+      const paintYellow = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.9 });
+      function paint(x, z, w, dd, mat, parent) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, dd), mat || paintMat);
+        m.rotation.x = -Math.PI / 2;
+        m.position.set(x, 0.05, z);
+        (parent || PG).add(m);
+        return m;
+      }
+      function groundLabel(text, x, z, w, dd, alongZ, color) {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = Math.round(512 * dd / w);
+        const g = c.getContext('2d');
+        g.fillStyle = color || '#ffffff';
+        g.font = '800 ' + Math.round(c.height * 0.62) + 'px Inter, Arial, sans-serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(text, c.width / 2, c.height / 2 + 2);
+        const tex = new THREE.CanvasTexture(c);
+        tex.encoding = THREE.sRGBEncoding;
+        tex.anisotropy = 4;
+        const geo = new THREE.PlaneGeometry(w, dd);
+        geo.rotateZ(Math.PI);
+        geo.rotateX(-Math.PI / 2);
+        if (alongZ) geo.rotateY(-Math.PI / 2);
+        const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+        m.position.set(x, 0.07, z);
+        PG.add(m);
+      }
+
+      // Sabit zemin çizgileri: dikey park yerleri (sol) ve kaldırım çizgisi (sağ)
+      for (let z = -60; z <= 90; z += 30) paint(50, z, 36, 1.2);
+      paint(32, 15, 1.2, 151.2);
+      paint(-16, 0, 0.9, 250, paintYellow);
+      paint(-12, -112, 1.2, 24);
+      paint(12, -112, 1.2, 24);
+      groundLabel('DİKEY PARK', 22, -80, 34, 6, true);
+      groundLabel('KALDIRIM', -10, -80, 30, 5, true, '#fde68a');
+      groundLabel('BAŞLANGIÇ', 0, -97, 22, 4.5, false, '#e2e8f0');
+
+      // Park etmiş araçlar (stilize)
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.85 });
+      const glassMat = new THREE.MeshStandardMaterial({ color: 0x1f2a3a, roughness: 0.15, metalness: 0.3 });
+      const lightMat = new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff2b3, emissiveIntensity: 0.4 });
+      const tailMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, emissive: 0xb91c1c, emissiveIntensity: 0.3 });
+      const CAR_COLORS = [0xef4444, 0x3b82f6, 0xf59e0b, 0x10b981, 0x6366f1, 0xf43f5e, 0x0ea5e9, 0xe2e8f0, 0x334155];
+      const lotDyn = new THREE.Group();
+      PG.add(lotDyn);
+      const parkBaseMeshes = LAYOUTS.park.meshes.slice();
+      const parkBaseBoxes = LAYOUTS.park.boxes.slice();
+
+      function parkedCar(o, color, facing) {
+        const body = addBlock(['park'], lotDyn, o.x, o.z, o.w, o.d, 8, color);
+        body.position.y = 6;
+        const g = new THREE.Group();
+        g.position.set(o.x, 0, o.z);
+        g.rotation.y = facing;
+        const cabin = new THREE.Mesh(new THREE.BoxGeometry(15, 5, 12), glassMat);
+        cabin.position.set(0, 12.5, -1);
+        cabin.castShadow = true;
+        g.add(cabin);
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(14, 0.8, 10), body.material);
+        roof.position.set(0, 15.2, -1);
+        g.add(roof);
+        [[-8.4, 7.2], [8.4, 7.2], [-8.4, -7.2], [8.4, -7.2]].forEach(([wx, wz]) => {
+          const t = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 2.2, 20), tireMat);
+          t.rotation.z = Math.PI / 2;
+          t.position.set(wx, 2.6, wz);
+          t.castShadow = true;
+          g.add(t);
+        });
+        [-5.5, 5.5].forEach((lx) => {
+          const f = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.4, 0.4), lightMat);
+          f.position.set(lx, 7.5, 11.6);
+          g.add(f);
+          const r = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.4, 0.4), tailMat);
+          r.position.set(lx, 7.5, -11.6);
+          g.add(r);
+        });
+        lotDyn.add(g);
+      }
+
+      let lotSeed = (Date.now() % 1000000) | 0;
+      function buildLot(seed) {
+        while (lotDyn.children.length) lotDyn.remove(lotDyn.children[0]);
+        LAYOUTS.park.meshes = parkBaseMeshes.slice();
+        LAYOUTS.park.boxes = parkBaseBoxes.slice();
+        const lot = makeLot(seed);
+        const rnd = mulberry32(seed + 7);
+        lot.boxes.forEach((o) => {
+          if (o.kind === 'car') {
+            const color = CAR_COLORS[Math.floor(rnd() * CAR_COLORS.length)];
+            const facing = o.w > o.d ? (rnd() < 0.5 ? Math.PI / 2 : -Math.PI / 2) : (rnd() < 0.5 ? 0 : Math.PI);
+            parkedCar(o, color, facing);
+          } else if (o.kind === 'bin') {
+            addBlock(['park'], lotDyn, o.x, o.z, o.w, o.d, o.h, 0x4d7c0f);
+          } else {
+            const col = o.kind === 'curb' ? 0xe5e7eb : 0xd6dbe2;
+            addBlock(['park'], lotDyn, o.x, o.z, o.w, o.d, o.h, col);
+          }
+        });
+        return lot;
+      }
+      buildLot(lotSeed);
+
+      function applyLayout(k) {
+        LAYOUTS.free.group.visible = k === 'free';
+        LAYOUTS.park.group.visible = k === 'park';
+        floorGrid.visible = k === 'free';
+        obstacleMeshes.length = 0;
+        obstacleBoxes.length = 0;
+        LAYOUTS[k].meshes.forEach((m) => obstacleMeshes.push(m));
+        LAYOUTS[k].boxes.forEach((b) => obstacleBoxes.push(b));
+      }
+      applyLayout('free');
+
+      // -----------------------------------------------------------------------
+      // I) PARÇA BİLGİLERİ (Malzeme listesi ve bilgi kartı için)
+      // -----------------------------------------------------------------------
+      const PART_INFO = {
+        arduino: { cat: 'Kontrol', name: 'Arduino Mega 2560', qty: 1, dot: '#1f5fbf',
+          desc: "Robotun beyni. Altı ultrasonik sensörü sırayla okur, buzzer'ı çalar ve üstüne takılı motor shield'e yön ve hız komutları gönderir. 54 dijital pini, altı sensörün 12 pinine rahatça yer açar.",
+          specs: [['Mikrodenetleyici', 'ATmega2560'], ['Saat', '16 MHz'], ['Dijital pin', '54 (15 PWM)'], ['Analog giriş', '16'], ['Boyut', '101,5 × 53,3 mm']] },
+        shield: { cat: 'Güç elektroniği', name: 'L293D Motor Shield (HW-130)', qty: 1, dot: '#1a46b8',
+          desc: "Mega'nın üstüne doğrudan takılan sürücü kartı. İki L293D entegresiyle dört DC motoru (M1–M4) ayrı ayrı sürer; 74HC595 kaydırma yazmacı sayesinde az pin kullanır. Motor gücü yeşil EXT_PWR klemensinden gelir",
+          specs: [['Motor kanalı', '4 DC (M1–M4)'], ['Akım', '0,6 A / kanal (1,2 A tepe)'], ['Motor beslemesi', '4,5–25 V'], ['Kullandığı pinler', 'D3–D8, D11, D12'], ['Motorlar', 'M1 sağ ön, M2 sağ arka, M3 sol ön, M4 sol arka']] },
+        hcsr04: { cat: 'Sensör', name: 'HC-SR04 Ultrasonik Sensör', qty: 6, dot: '#1e4fd8',
+          desc: "40 kHz ses darbesi gönderip yankının dönüş süresinden mesafeyi hesaplar. Altı sabit sensör robotun çevresini kollar: önde ve arkada birer, her yanda ikişer. Yan sensörler gövdenin ön ve arka uçlarına yakındır; böylece park yerinin başlangıcını ve sonunu erken görür. Yan yana sensörler birbirinin yankısını karıştırmasın diye sırayla okunur.",
+          specs: [['Konum', 'Ön 1 • Arka 1 • Sol 2 • Sağ 2 (uçlara yakın)'], ['Menzil', '2–400 cm'], ['Ölçüm açısı', '≈ 15°'], ['Besleme', '5 V'], ['Buzzer eşikleri', '15 / 10 / 5 cm'], ['Bağlantı', 'TRIG/ECHO → D22–D33']] },
+        bracket: { cat: 'Bağlantı', name: 'Sensör Braketi', qty: 6, dot: '#2a2d33',
+          desc: "Her HC-SR04 sensörünü üst plakaya dik olarak sabitleyen L şeklinde siyah akrilik braket.",
+          specs: [['Malzeme', 'Siyah akrilik'], ['Kalınlık', '3 mm']] },
+        motor: { cat: 'Hareket', name: 'TT Redüktörlü DC Motor', qty: 4, dot: '#f7c600',
+          desc: "Sarı plastik dişli kutulu 130 tipi DC motor. Dişli kutusu devri düşürüp torku artırır; çift taraflı mil tekerleği doğrudan taşır.",
+          specs: [['Gerilim', '3–6 V'], ['Dişli oranı', '1:48'], ['Yüksüz hız', '≈ 200 rpm (6 V)'], ['Mil', 'D tipi, çift taraflı']] },
+        wheel: { cat: 'Hareket', name: '65 mm Kauçuk Tekerlek', qty: 4, dot: '#f7c600',
+          desc: "Siyah kauçuk lastik, sarı plastik jant (şasi kitindeki gibi). TT motorun D tipi miline doğrudan geçer.",
+          specs: [['Çap', '≈ 65 mm'], ['Genişlik', '≈ 26 mm'], ['Göbek', 'D tipi']] },
+        battery: { cat: 'Güç', name: '4×AA Pil Yuvası', qty: 2, dot: '#3f4550',
+          desc: "4 adet AA pilin tek sıra yan yana durduğu düz yuva; alt katın ortasında arka arkaya iki tane var. Yuvalar seri bağlı (8 × 1,5 V = 12 V) ve shield'in EXT_PWR girişine gider. TT motorlar 3–6 V için yapıldığından kodda motor hızı (PWM) yaklaşık %60 ile sınırlı.",
+          specs: [['Pil', '8 × AA (1,5 V)'], ['Toplam', '12 V (seri)'], ['Giriş', 'Shield EXT_PWR']] },
+        buzzer: { cat: 'Ses', name: 'Aktif Buzzer', qty: 1, dot: '#0b0b0c',
+          desc: "İki bacaklı aktif buzzer: kendi osilatörü olduğu için + bacağına HIGH verilince öter, ton üretmek gerekmez. Park sensörü gibi çalışır: engel 15 cm'ye gelince kesik kesik başlar, yaklaştıkça sıklaşır, 5 cm'nin altında sürekli öter.",
+          specs: [['Besleme', '3,3–5 V'], ['Bacaklar', '+ (uzun) → D42, − → GND'], ['15 cm', '≈ 1,4 bip/sn'], ['10 cm', '≈ 2,4 bip/sn'], ['< 5 cm', 'Sürekli']] },
+        chassisTop: { cat: 'Şasi', name: 'Üst Şeffaf Akrilik Plaka', qty: 1, dot: '#bae6fd',
+          desc: "Arduino Mega, motor shield, altı sensör ve buzzer'ın oturduğu şeffaf üst kat. Alttaki kabloların görülmesini kolaylaştırır.",
+          specs: [['Malzeme', 'Şeffaf akrilik'], ['Kalınlık', '3 mm'], ['Boyut', '≈ 136 × 204 mm']] },
+        chassisBottom: { cat: 'Şasi', name: 'Alt Siyah Akrilik Plaka', qty: 1, dot: '#16181d',
+          desc: "Motorların, pil yuvalarının ve motor sürücünün bağlandığı lazer kesim taban. Yarıklar kablo geçişi içindir.",
+          specs: [['Malzeme', 'Siyah akrilik'], ['Kalınlık', '3 mm'], ['Boyut', '≈ 132 × 228 mm']] },
+        standoff: { cat: 'Bağlantı', name: 'Pirinç Aralayıcı (M3)', qty: 6, dot: '#d8b24c',
+          desc: "İki katı birbirine bağlayan altıgen aralayıcılar; katlar arasındaki boşluğu belirler.",
+          specs: [['Diş', 'M3'], ['Boy', '≈ 40 mm'], ['Malzeme', 'Pirinç']] },
+        screws: { cat: 'Bağlantı', name: 'M3 Vida ve Pul', qty: 12, dot: '#d6dce2',
+          desc: "Aralayıcıları üst ve alt plakaya sabitler (6 üst, 6 alt).",
+          specs: [['Diş', 'M3'], ['Pul', '6 adet (üst)']] },
+        wiring: { cat: 'Bağlantı', name: 'Renkli Jumper Kablolar', qty: '—', dot: '#f97316',
+          desc: "Erkek uçlu gökkuşağı jumper kablolar sensörleri ve buzzer'ı Mega'nın çift sıra pin başlığına bağlar. Motor kabloları shield'in yeşil klemenslerine vidalanır. Patlatılmış görünümde gizlenir.",
+          specs: [['Motorlar', 'M1–M4 klemensleri'], ['Sensörler', 'D22–D33'], ['Buzzer', 'D42'], ['Pil', 'EXT_PWR (12 V)']] }
+      };
+      const PART_IMG = { arduino: 'img/mega.jpg', shield: 'img/shield.jpg', hcsr04: 'img/hcsr04.jpg', motor: 'img/tt-motor.jpg',
+        wheel: 'img/tekerlek.jpg', chassisTop: 'img/sase.jpg', chassisBottom: 'img/sase.jpg', standoff: 'img/sase.jpg', screws: 'img/sase.jpg',
+        battery: 'img/pil-yuvasi.jpg', wiring: 'img/jumper.jpg', buzzer: 'img/buzzer.jpg' };
+      Object.keys(PART_IMG).forEach((k) => { if (PART_INFO[k]) PART_INFO[k].img = PART_IMG[k]; });
+      const PART_ORDER = ['arduino', 'shield', 'hcsr04', 'bracket', 'buzzer', 'motor', 'wheel', 'battery', 'chassisTop', 'chassisBottom', 'standoff', 'screws', 'wiring'];
+
+      // 7. KULLANICI ETKİLEŞİMİ VE ARAYÜZ KONTROLLERİ
+      let isAutoRotating = true;
+      let isTopDeckVisible = true;
+      let isExploded = false;
+      let explodeProgress = 0;
+      let isDriving = false;
+
+      // Kamera geçiş animasyonu değişkenleri
+      let camAnimActive = false;
+      const camTargetPos = new THREE.Vector3();
+      const camTargetLook = new THREE.Vector3();
+
+      // Kullanıcı sahneye dokunduğunda otomatik kamera animasyonunu durdur
+      controls.addEventListener('start', () => {
+        camAnimActive = false;
+      });
+
+      // 360 Otomatik Döndür butonu
+      const btnAutoRotate = document.getElementById('btn-autorotate');
+      const iconAutoRotate = document.getElementById('icon-autorotate');
+      btnAutoRotate.addEventListener('click', () => {
+        isAutoRotating = !isAutoRotating;
+        controls.autoRotate = isAutoRotating;
+        if (isAutoRotating) {
+          btnAutoRotate.classList.remove('bg-white', 'text-slate-700', 'border', 'border-slate-200/80');
+          btnAutoRotate.classList.add('bg-slate-900', 'text-white');
+          iconAutoRotate.classList.add('spin-icon');
+        } else {
+          btnAutoRotate.classList.remove('bg-slate-900', 'text-white');
+          btnAutoRotate.classList.add('bg-white', 'text-slate-700', 'border', 'border-slate-200/80');
+          iconAutoRotate.classList.remove('spin-icon');
+        }
+      });
+
+      // Kamera açı önayar butonları
+      const viewButtons = document.querySelectorAll('.view-btn');
+      viewButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const presetKey = btn.getAttribute('data-view');
+          const preset = CAMERA_PRESETS[presetKey];
+          if (!preset) return;
+
+          viewButtons.forEach((b) => {
+            b.classList.remove('bg-white', 'text-slate-900', 'shadow-sm', 'font-semibold');
+            b.classList.add('text-slate-600', 'font-medium');
+          });
+          btn.classList.remove('text-slate-600', 'font-medium');
+          btn.classList.add('bg-white', 'text-slate-900', 'shadow-sm', 'font-semibold');
+
+          camTargetPos.copy(preset.pos).add(robotGroup.position);
+          camTargetLook.copy(preset.target).add(robotGroup.position);
+          camAnimActive = true;
+        });
+      });
+
+      // Üst Şasiyi Gizle / Göster
+      const btnTopDeck = document.getElementById('btn-topdeck');
+      const labelTopDeck = document.getElementById('label-topdeck');
+      btnTopDeck.addEventListener('click', () => {
+        isTopDeckVisible = !isTopDeckVisible;
+        topDeckGroup.visible = isTopDeckVisible;
+        topScrewsGroup.visible = isTopDeckVisible;
+        electronicsGroup.visible = isTopDeckVisible;
+        sensorGroup.visible = isTopDeckVisible;
+        labelTopDeck.textContent = isTopDeckVisible ? 'Üst Katı Gizle' : 'Üst Katı Göster';
+        btnTopDeck.classList.toggle('ring-2', !isTopDeckVisible);
+        btnTopDeck.classList.toggle('ring-sky-500/40', !isTopDeckVisible);
+      });
+
+      // Patlatılmış Görünüm
+      const btnExplode = document.getElementById('btn-explode');
+      const labelExplode = document.getElementById('label-explode');
+      btnExplode.addEventListener('click', () => {
+        isExploded = !isExploded;
+        labelExplode.textContent = isExploded ? 'Parçaları Birleştir' : 'Patlatılmış Görünüm';
+        btnExplode.classList.toggle('ring-2', isExploded);
+        btnExplode.classList.toggle('ring-amber-500/50', isExploded);
+      });
+
+      // Motor / Tekerlek Testi
+      const btnDrive = document.getElementById('btn-drive');
+      const labelDrive = document.getElementById('label-drive');
+      btnDrive.addEventListener('click', () => {
+        isDriving = !isDriving;
+        labelDrive.textContent = isDriving ? 'Motoru Durdur' : 'Motor Testi';
+        btnDrive.classList.toggle('ring-2', isDriving);
+        btnDrive.classList.toggle('ring-emerald-500/50', isDriving);
+      });
+
+      // 8. RAYCASTER İLE PARÇA TANIMA (Üzerine gelince parça adını gösterir)
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+      const partBadge = document.getElementById('part-badge');
+      const partNameEl = document.getElementById('part-name');
+
+      window.addEventListener('pointermove', (e) => {
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(pointer, camera);
+        const hits = raycaster.intersectObjects(interactiveMeshes, false);
+        const validHit = hits.find((h) => isVisibleDeep(h.object));
+
+        if (validHit && validHit.object.userData.partLabel) {
+          partNameEl.textContent = validHit.object.userData.partLabel;
+          partBadge.classList.remove('opacity-0');
+          partBadge.classList.add('opacity-100');
+        } else {
+          partBadge.classList.remove('opacity-100');
+          partBadge.classList.add('opacity-0');
+        }
+      });
+
+      // Pencere boyutu değişimi
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // 8b. PARÇA SEÇİMİ, MALZEME LİSTESİ VE BİLGİ KARTI
+      function isVisibleDeep(o) {
+        while (o) {
+          if (!o.visible) return false;
+          o = o.parent;
+        }
+        return true;
+      }
+      function setAutoRotate(v) {
+        if (isAutoRotating !== v) btnAutoRotate.click();
+      }
+
+      const hlCache = new Map();
+      const hlActive = new Map();
+      let selectedKey = null;
+      function hlMat(m) {
+        if (!hlCache.has(m)) {
+          const c = m.clone();
+          if (c.emissive) {
+            c.emissive.setHex(0xf59e0b);
+            c.emissiveIntensity = 0.4;
+          }
+          hlCache.set(m, c);
+        }
+        return hlCache.get(m);
+      }
+      function applyHighlight(key) {
+        hlActive.forEach((orig, mesh) => { mesh.material = orig; });
+        hlActive.clear();
+        if (!key) return;
+        (partMeshesByKey[key] || []).forEach((mesh) => {
+          hlActive.set(mesh, mesh.material);
+          mesh.material = Array.isArray(mesh.material) ? mesh.material.map(hlMat) : hlMat(mesh.material);
+        });
+      }
+
+      const partsPanel = document.getElementById('parts-panel');
+      const partsList = document.getElementById('parts-list');
+      const infoCard = document.getElementById('info-card');
+      const btnParts = document.getElementById('btn-parts');
+      const headerEl = document.querySelector('header');
+      const footerEl = document.getElementById('footer');
+
+      partsList.innerHTML = PART_ORDER.map((k) => {
+        const p = PART_INFO[k];
+        return '<li><button type="button" data-key="' + k + '" class="part-item w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-left text-xs font-medium text-slate-700 hover:bg-slate-100">' +
+          '<span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full flex-none ring-1 ring-black/10" style="background:' + p.dot + '"></span>' + p.name + '</span>' +
+          '<span class="qty text-slate-400 tabular-nums">' + (p.qty === '—' ? '' : '×' + p.qty) + '</span></button></li>';
+      }).join('');
+      const totalQty = PART_ORDER.reduce((sum, k) => sum + (typeof PART_INFO[k].qty === 'number' ? PART_INFO[k].qty : 0), 0);
+      document.getElementById('parts-total').textContent = totalQty + ' parça';
+
+      function layoutPanels() {
+        const top = Math.round(headerEl.getBoundingClientRect().bottom + 12);
+        const bottom = Math.round(window.innerHeight - footerEl.getBoundingClientRect().top + 12);
+        partsPanel.style.top = top + 'px';
+        partsPanel.style.maxHeight = Math.max(160, window.innerHeight - top - bottom) + 'px';
+        infoCard.style.top = top + 'px';
+        infoCard.style.maxHeight = Math.max(160, window.innerHeight - top - bottom) + 'px';
+        infoCard.style.overflowY = 'auto';
+        ['asm-panel', 'iso-panel'].forEach((id) => { const el = document.getElementById(id); if (el) el.style.top = top + 'px'; });
+      }
+
+      let partsOpen = false;
+      function setPartsOpen(v) {
+        partsOpen = v;
+        partsPanel.style.display = v ? 'block' : 'none';
+        btnParts.classList.toggle('ring-2', v);
+        btnParts.classList.toggle('ring-slate-400/60', v);
+        if (v && window.innerWidth < 768) infoCard.classList.add('hidden');
+        layoutPanels();
+      }
+      setPartsOpen(window.innerWidth >= 900);
+      btnParts.addEventListener('click', () => setPartsOpen(!partsOpen));
+
+      function selectPart(key, focus) {
+        selectedKey = key;
+        applyHighlight(key);
+        partsList.querySelectorAll('.part-item').forEach((b) => b.classList.toggle('active', b.dataset.key === key));
+        if (!key) {
+          infoCard.classList.add('hidden');
+          return;
+        }
+        const p = PART_INFO[key];
+        document.getElementById('info-cat').textContent = p.cat + (typeof p.qty === 'number' ? ' • ' + p.qty + ' adet' : '');
+        document.getElementById('info-title').textContent = p.name;
+        document.getElementById('info-desc').textContent = p.desc;
+        const infoImg = document.getElementById('info-img');
+        infoImg.classList.toggle('hidden', !p.img);
+        if (p.img) { infoImg.src = p.img; infoImg.alt = p.name + ' fotoğrafı'; }
+        document.getElementById('info-specs').innerHTML = p.specs.map(([k, v]) =>
+          '<dt class="text-slate-400">' + k + '</dt><dd class="font-semibold text-slate-800 text-right">' + v + '</dd>').join('');
+        if (window.innerWidth < 768) setPartsOpen(false);
+        infoCard.classList.remove('hidden');
+        layoutPanels();
+        setAutoRotate(false);
+
+        if (focus) {
+          const box = new THREE.Box3();
+          (partMeshesByKey[key] || []).forEach((m) => { if (isVisibleDeep(m)) box.expandByObject(m); });
+          if (!box.isEmpty()) {
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3()).length();
+            const dir = camera.position.clone().sub(controls.target).normalize();
+            camTargetLook.copy(center);
+            camTargetPos.copy(center).add(dir.multiplyScalar(Math.min(48, Math.max(15, size * 1.5))));
+            camAnimActive = true;
+          }
+        }
+      }
+      partsList.addEventListener('click', (e) => {
+        const b = e.target.closest('.part-item');
+        if (!b) return;
+        const key = b.dataset.key;
+        selectPart(key === selectedKey ? null : key, key !== selectedKey);
+      });
+      document.getElementById('info-close').addEventListener('click', () => selectPart(null));
+
+      // Sahnede tıklayarak parça seçme (sürükleme değilse)
+      let downPos = null;
+      renderer.domElement.addEventListener('pointerdown', (e) => { downPos = [e.clientX, e.clientY]; });
+      renderer.domElement.addEventListener('pointerup', (e) => {
+        if (!downPos) return;
+        const moved = Math.hypot(e.clientX - downPos[0], e.clientY - downPos[1]);
+        downPos = null;
+        if (moved > 6) return;
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        const hit = raycaster.intersectObjects(interactiveMeshes, false).find((h) => isVisibleDeep(h.object));
+        selectPart(hit ? hit.object.userData.partKey : null, false);
+      });
+
+      // 8c. SONAR TARAMA
+      let sonarOn = false;
+      const btnSonar = document.getElementById('btn-sonar');
+      const labelSonar = document.getElementById('label-sonar');
+      function setSonar(v) {
+        sonarOn = v;
+        sonarUnits.forEach((u) => { u.cone.visible = v; });
+        labelSonar.textContent = v ? 'Alanları Gizle' : 'Sensör Alanları';
+        btnSonar.classList.toggle('ring-2', v);
+        btnSonar.classList.toggle('ring-sky-500/50', v);
+      }
+      btnSonar.addEventListener('click', () => setSonar(!sonarOn));
+
+      // 8d. SÜRÜŞ MODU (manuel + otonom engelden kaçınma)
+      let driveMode = false;
+      let autoMode = false;
+      const keys = { f: false, b: false, l: false, r: false };
+      const drive = { v: 0, w: 0, heading: 0, auto: 'fwd', t: 0, dir: 1 };
+      const driveHud = document.getElementById('drive-hud');
+      const btnDriveMode = document.getElementById('btn-drivemode');
+      const labelDriveMode = document.getElementById('label-drivemode');
+      const btnAuto = document.getElementById('btn-auto');
+      const hudSpeed = document.getElementById('hud-speed');
+      const HUD_SHORT = { 'Ön': 'Ön', 'Arka': 'Arka', 'Sol ön': 'Sol ön', 'Sol arka': 'Sol arka', 'Sağ ön': 'Sağ ön', 'Sağ arka': 'Sağ arka' };
+      // Araçtaki yerlerine göre: üst satır ön, alt satır arka
+      const HUD_LAYOUT = ['Sol ön', 'Ön', 'Sağ ön', 'Sol arka', 'Arka', 'Sağ arka'];
+      document.getElementById('hud-sonars').innerHTML = HUD_LAYOUT.map((n) => {
+        if (!n) return '<div></div>';
+        const i = sonarUnits.findIndex((u) => u.name === n);
+        return '<div class="whitespace-nowrap"><span class="text-slate-400">' + HUD_SHORT[n] + '</span> <b id="hud-s' + i + '" class="text-slate-800">—</b></div>';
+      }).join('');
+      const hudCells = sonarUnits.map((u, i) => document.getElementById('hud-s' + i));
+      const hudMode = document.getElementById('hud-mode');
+      let hudTimer = 0;
+
+      // Buzzer sesi (Web Audio): aktif buzzer gibi sabit ≈2,3 kHz ton
+      const ALARM_CM = 5;
+      let audioCtx = null;
+      let buzzGain = null;
+      let soundOn = true;
+      let buzzState = false;
+      const hudAlarm = document.getElementById('hud-alarm');
+      const btnSound = document.getElementById('btn-sound');
+      function ensureAudio() {
+        try {
+          if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            osc.type = 'square';
+            osc.frequency.value = 2300;
+            buzzGain = audioCtx.createGain();
+            buzzGain.gain.value = 0;
+            osc.connect(buzzGain);
+            buzzGain.connect(audioCtx.destination);
+            osc.start();
+          }
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+        } catch (err) { audioCtx = null; }
+      }
+      // Park sensörü gibi: ≤15 cm aralıklı, ≤10 cm sık, <5 cm sürekli
+      const BEEP_LEVELS = [
+        null,
+        { text: "Bip… engel 15 cm'den yakın", cls: 'bg-amber-500' },
+        { text: "Bipler hızlanıyor: engel 10 cm'den yakın", cls: 'bg-orange-600' },
+        { text: "Sürekli ötüyor: engel 5 cm'den yakın!", cls: 'bg-red-600' }
+      ];
+      let beepLevel = 0;
+      let beepPhase = 0;
+      function setBeepLevel(level) {
+        if (level === beepLevel) return;
+        beepLevel = level;
+        const L = BEEP_LEVELS[level];
+        hudAlarm.classList.toggle('hidden', !L);
+        hudAlarm.classList.remove('bg-amber-500', 'bg-orange-600', 'bg-red-600', 'animate-pulse');
+        if (L) {
+          hudAlarm.textContent = L.text;
+          hudAlarm.classList.add(L.cls);
+          if (level === 3) hudAlarm.classList.add('animate-pulse');
+        }
+      }
+      function setBuzz(on) {
+        buzzState = on;
+        materials.buzzerBody.emissiveIntensity = on ? 1.0 : 0;
+        if (buzzGain && audioCtx) {
+          try { buzzGain.gain.setTargetAtTime(on && soundOn ? 0.05 : 0, audioCtx.currentTime, 0.004); } catch (err) {}
+        }
+      }
+      btnSound.addEventListener('click', () => {
+        soundOn = !soundOn;
+        ensureAudio();
+        btnSound.textContent = 'Buzzer sesi: ' + (soundOn ? 'Açık' : 'Kapalı');
+        setBuzz(buzzState);
+      });
+
+      function setAuto(v) {
+        autoMode = v;
+        drive.auto = 'fwd';
+        btnAuto.textContent = v ? 'Otonomu Durdur' : 'Otonom Sürüş';
+        btnAuto.classList.toggle('bg-emerald-500', v);
+        btnAuto.classList.toggle('text-white', v);
+        btnAuto.classList.toggle('bg-white', !v);
+        btnAuto.classList.toggle('text-slate-700', !v);
+        hudMode.textContent = v ? 'Otonom' : 'Manuel';
+        if (v && !sonarOn) setSonar(true);
+        if (v && park) stopPark('Otonom sürüşe geçildi.');
+        if (v && !camFollow) { camFollow = true; chaseView(); }
+      }
+      btnAuto.addEventListener('click', () => { ensureAudio(); setAuto(!autoMode); });
+
+      function chaseView() {
+        const p = robotGroup.position;
+        const h = drive.heading;
+        camTargetPos.set(p.x - Math.sin(h) * 30 - Math.cos(h) * 12, 22, p.z - Math.cos(h) * 30 + Math.sin(h) * 12);
+        camTargetLook.set(p.x + Math.sin(h) * 6, 3.6, p.z + Math.cos(h) * 6);
+        camAnimActive = true;
+      }
+
+      function setDriveMode(v) {
+        driveMode = v;
+        worldGroup.visible = v;
+        driveHud.classList.toggle('hidden', !v);
+        labelDriveMode.textContent = v ? 'Modeli İncele' : 'Park Simülasyonu';
+        controls.maxDistance = v ? 180 : 58;
+        Object.keys(keys).forEach((k) => { keys[k] = false; });
+        drive.v = 0;
+        drive.w = 0;
+        if (v) {
+          ensureAudio();
+          stopAssembly();
+          endIsolation(false);
+          setAutoRotate(false);
+          setPartsOpen(false);
+          if (isExploded) btnExplode.click();
+          if (!isTopDeckVisible) btnTopDeck.click();
+          selectPart(null);
+          setLayout(currentLayout);
+        } else {
+          setAuto(false);
+          stopPark();
+          setBuzz(false);
+          setBeepLevel(0);
+          robotGroup.position.set(0, 0, 0);
+          drive.heading = 0;
+          robotGroup.rotation.y = 0;
+          camera.position.copy(CAMERA_PRESETS.iso.pos);
+          controls.target.copy(CAMERA_PRESETS.iso.target);
+          camAnimActive = false;
+        }
+        layoutPanels();
+      }
+      btnDriveMode.addEventListener('click', () => setDriveMode(!driveMode));
+
+      const KEYMAP = { KeyW: 'f', ArrowUp: 'f', KeyS: 'b', ArrowDown: 'b', KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r' };
+      window.addEventListener('keydown', (e) => {
+        const k = KEYMAP[e.code];
+        if (!k || !driveMode) return;
+        e.preventDefault();
+        ensureAudio();
+        keys[k] = true;
+        if (autoMode) setAuto(false);
+        if (park) stopPark('Manuel kontrole geçildi.');
+        if (!camFollow) { camFollow = true; chaseView(); }
+      });
+      window.addEventListener('keyup', (e) => {
+        const k = KEYMAP[e.code];
+        if (k) keys[k] = false;
+      });
+      window.addEventListener('blur', () => { Object.keys(keys).forEach((k) => { keys[k] = false; }); });
+
+      document.querySelectorAll('.dpad-btn').forEach((b) => {
+        const k = b.dataset.dir;
+        const on = (e) => {
+          e.preventDefault();
+          try { b.setPointerCapture(e.pointerId); } catch (err) {}
+          ensureAudio();
+          keys[k] = true;
+          b.classList.add('pressed');
+          if (autoMode) setAuto(false);
+          if (park) stopPark('Manuel kontrole geçildi.');
+          if (!camFollow) { camFollow = true; chaseView(); }
+        };
+        const off = () => { keys[k] = false; b.classList.remove('pressed'); };
+        b.addEventListener('pointerdown', on);
+        b.addEventListener('pointerup', off);
+        b.addEventListener('pointercancel', off);
+        b.addEventListener('lostpointercapture', off);
+      });
+
+      const sonarRay = new THREE.Raycaster();
+      const tmpV = new THREE.Vector3();
+      const tmpDir = new THREE.Vector3();
+      const tmpQ = new THREE.Quaternion();
+      function castFrom(origin, dir) {
+        sonarRay.set(origin, dir);
+        sonarRay.far = 400;
+        const h = sonarRay.intersectObjects(obstacleMeshes, false);
+        return h.length ? h[0].distance : Infinity;
+      }
+      function measureSonars() {
+        sonarUnits.forEach((u) => {
+          u.cone.getWorldPosition(tmpV);
+          const h = drive.heading + u.yaw + (u.pan ? u.pan.rotation.y : 0);
+          tmpDir.set(Math.sin(h), 0, Math.cos(h));
+          u.dist = castFrom(tmpV.clone(), tmpDir.clone());
+        });
+      }
+      const sonarByName = (n) => sonarUnits.find((u) => u.name === n).dist;
+      function frontClearance() {
+        const p = robotGroup.position;
+        let m = Infinity;
+        [-0.45, 0, 0.45].forEach((a) => {
+          const h = drive.heading + a;
+          tmpDir.set(Math.sin(h), 0, Math.cos(h));
+          tmpV.set(p.x, 5, p.z);
+          m = Math.min(m, castFrom(tmpV, tmpDir) - 11.6 / Math.cos(a));
+        });
+        return m;
+      }
+      // Gerçek araç ölçüleri (cm): tekerlek dışları ±9, ön tampon +11,6, arka −11,3
+      const FOOT = [];
+      [-9, -4.5, 0, 4.5, 9].forEach((x) => { FOOT.push([x, 11.6], [x, -11.3]); });
+      [-5.8, 0, 5.8].forEach((z) => { FOOT.push([9, z], [-9, z]); });
+      function blockedPose(x, z, h) {
+        const c = Math.cos(h);
+        const sn = Math.sin(h);
+        for (const [lx, lz] of FOOT) {
+          const wx = x + lx * c + lz * sn;
+          const wz = z - lx * sn + lz * c;
+          for (const b of obstacleBoxes) {
+            if (wx > b.minX - 0.3 && wx < b.maxX + 0.3 && wz > b.minZ - 0.3 && wz < b.maxZ + 0.3) return true;
+          }
+        }
+        return false;
+      }
+
+      // 8e. OTOPARK: robot kendi ölçer, kendi karar verir
+      let currentLayout = 'park';
+      let park = null;
+      let camFollow = true;
+      let lastParkText = '';
+      let lastLogLen = -1;
+      const parkControls = document.getElementById('park-controls');
+      const parkStatus = document.getElementById('park-status');
+      const parkLog = document.getElementById('park-log');
+      const layoutBtns = document.querySelectorAll('.layout-btn');
+      const btnAutoPark = document.getElementById('btn-autopark');
+      const PARK_NAMES = { duz: 'Düz park', geri: 'Geri park', paralel: 'Paralel park' };
+
+      function showParkStatus(text) {
+        if (text === lastParkText) return;
+        lastParkText = text;
+        parkStatus.textContent = text;
+        parkStatus.classList.toggle('hidden', !text);
+        layoutPanels();
+      }
+      function renderParkLog(log) {
+        const n = log ? log.length : 0;
+        if (n === lastLogLen) return;
+        lastLogLen = n;
+        parkLog.classList.toggle('hidden', !n);
+        parkLog.innerHTML = (log || []).slice(-5).map((l) =>
+          '<div class="flex gap-1.5 items-baseline"><span class="font-bold ' + (l.ok ? 'text-emerald-600' : 'text-slate-400') + '">' + (l.ok ? '✓' : '✕') + '</span>' +
+          '<span class="text-slate-500 w-7 flex-none">' + l.side + '</span><span class="' + (l.ok ? 'font-semibold text-slate-800' : 'text-slate-600') + '">' + l.text + '</span></div>').join('');
+        layoutPanels();
+      }
+      function placeRobot(x, z, h) {
+        robotGroup.position.set(x, 0, z);
+        drive.heading = h;
+        robotGroup.rotation.y = h;
+        drive.v = 0;
+        drive.w = 0;
+      }
+      function stopPark(msg) {
+        park = null;
+        btnAutoPark.classList.remove('ring-2', 'ring-amber-400');
+        btnAutoPark.textContent = 'Otomatik Park Et';
+        hudMode.textContent = autoMode ? 'Otonom' : 'Manuel';
+        if (msg) showParkStatus(msg);
+      }
+      function setLayout(k) {
+        currentLayout = k;
+        stopPark();
+        removeTestBox();
+        applyLayout(k);
+        layoutBtns.forEach((b) => {
+          const on = b.dataset.layout === k;
+          b.classList.toggle('bg-white', on);
+          b.classList.toggle('text-slate-900', on);
+          b.classList.toggle('shadow-sm', on);
+          b.classList.toggle('font-semibold', on);
+          b.classList.toggle('text-slate-600', !on);
+          b.classList.toggle('font-medium', !on);
+        });
+        parkControls.classList.toggle('hidden', k !== 'park');
+        if (autoMode) setAuto(false);
+        const s = k === 'park' ? PARK_START : { x: 0, z: 0, h: 0 };
+        placeRobot(s.x, s.z, s.h);
+        camFollow = true;
+        chaseView();
+        renderParkLog(null);
+        showParkStatus(k === 'park' ? 'Robot otoparkın düzenini bilmiyor; ölçer ve kendisi karar verir. Kurallar: kaldırımda boşluk ≥ ' + RULES.parMinLen + ' cm → paralel · park yeri ≥ ' + RULES.duzMinWidth + ' cm → düz · ' + RULES.perpMinWidth + '–' + RULES.duzMinWidth + ' cm → geri.' : '');
+      }
+      layoutBtns.forEach((b) => b.addEventListener('click', () => setLayout(b.dataset.layout)));
+
+      function startPark() {
+        ensureAudio();
+        if (currentLayout !== 'park') setLayout('park');
+        if (autoMode) setAuto(false);
+        Object.keys(keys).forEach((k) => { keys[k] = false; });
+        placeRobot(PARK_START.x, PARK_START.z, PARK_START.h);
+        park = { steps: parkPlanAuto(), i: 0, mem: {}, dec: null };
+        lastLogLen = -1;
+        renderParkLog([]);
+        btnAutoPark.classList.add('ring-2', 'ring-amber-400');
+        btnAutoPark.textContent = 'Durdur';
+        hudMode.textContent = 'Otomatik park';
+        camFollow = true;
+        chaseView();
+      }
+      btnAutoPark.addEventListener('click', () => {
+        if (park) stopPark('Park durduruldu.');
+        else startPark();
+      });
+      document.getElementById('btn-newlot').addEventListener('click', () => {
+        lotSeed = (lotSeed * 16807 + 12345) % 2147483647;
+        buildLot(lotSeed);
+        setLayout('park');
+        showParkStatus('Yeni otopark hazır: araçlar ve boşluklar rastgele dizildi. Robot bunları bilmiyor.');
+      });
+      document.getElementById('btn-park-reset').addEventListener('click', () => setLayout('park'));
+
+      // Sınamak için robotun gidiş yönüne bir koli bırak / kaldır
+      const btnObstacle = document.getElementById('btn-obstacle');
+      let testBox = null;
+      let lastParkV = 0;
+      let resumeMsgT = 0;
+      function removeTestBox() {
+        if (!testBox) return;
+        LAYOUTS.park.group.remove(testBox.mesh);
+        LAYOUTS.park.meshes = LAYOUTS.park.meshes.filter((m) => m !== testBox.mesh);
+        LAYOUTS.park.boxes = LAYOUTS.park.boxes.filter((b) => b !== testBox.box);
+        if (currentLayout === 'park') applyLayout('park');
+        testBox = null;
+        btnObstacle.textContent = 'Engel Koy';
+      }
+      function dropTestBox() {
+        const dir = lastParkV < -0.5 ? -1 : 1;
+        const h = drive.heading;
+        const dist = (dir > 0 ? 11.6 : 11.3) + 12 + 4;
+        const x = robotGroup.position.x + Math.sin(h) * dir * dist;
+        const z = robotGroup.position.z + Math.cos(h) * dir * dist;
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(8, 12, 8), [
+          new THREE.MeshStandardMaterial({ color: 0xc08a4f, roughness: 0.85 }),
+          new THREE.MeshStandardMaterial({ color: 0xc08a4f, roughness: 0.85 }),
+          new THREE.MeshStandardMaterial({ color: 0xd9a46a, roughness: 0.8 }),
+          new THREE.MeshStandardMaterial({ color: 0xa8743f, roughness: 0.85 }),
+          new THREE.MeshStandardMaterial({ color: 0xb98049, roughness: 0.85 }),
+          new THREE.MeshStandardMaterial({ color: 0xb98049, roughness: 0.85 })
+        ]);
+        const tape = new THREE.Mesh(new THREE.BoxGeometry(8.05, 0.15, 1.6), new THREE.MeshStandardMaterial({ color: 0xe8d9b5, roughness: 0.4 }));
+        tape.position.y = 6.02;
+        mesh.add(tape);
+        mesh.position.set(x, 6, z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        LAYOUTS.park.group.add(mesh);
+        const box = { minX: x - 4, maxX: x + 4, minZ: z - 4, maxZ: z + 4 };
+        LAYOUTS.park.meshes.push(mesh);
+        LAYOUTS.park.boxes.push(box);
+        applyLayout('park');
+        testBox = { mesh, box };
+        btnObstacle.textContent = 'Engeli Kaldır';
+      }
+      btnObstacle.addEventListener('click', () => {
+        if (testBox) removeTestBox();
+        else dropTestBox();
+      });
+
+      function parkTick(dt) {
+        const P = { x: robotGroup.position.x, z: robotGroup.position.z, h: drive.heading };
+        let st = park.steps[park.i];
+        const wasPaused = !!park.mem.pause;
+        let [v, w, done] = runParkStepSafe(st, P, dt, sonarByName, park.mem);
+        if (wasPaused && !park.mem.pause) resumeMsgT = 2.5;
+        if (Math.abs(v) > 0.5) lastParkV = v;
+        renderParkLog(park.mem.log);
+        if (park.mem.error) { stopPark(park.mem.error + '. "Yeni Otopark" ile tekrar deneyin.'); return [0, 0]; }
+        if (st.t > 40) { stopPark('Park zaman aşımına uğradı.'); return [0, 0]; }
+        if (done) {
+          if (park.mem.decision && !park.dec) {
+            // Karar verildi: manevrayı ekle, kamerayı park yerine çevir
+            park.dec = park.mem.decision;
+            park.steps = park.steps.concat(maneuverSteps(park.dec));
+            const sx = park.dec.type === 'paralel' ? -26 : 45;
+            const sz = park.dec.type === 'paralel' ? park.dec.zStart - 22 : park.dec.c;
+            camFollow = false;
+            camTargetLook.set(sx, 0, sz);
+            camTargetPos.set(sx - 75, 115, sz - 80);
+            camAnimActive = true;
+          }
+          park.i++;
+          if (park.i >= park.steps.length) {
+            const kind = park.dec.type;
+            const f = Math.round(sonarByName('Ön'));
+            const r = Math.round(sonarByName('Arka'));
+            const lineGap = (-16.45 - (robotGroup.position.x + 9)).toFixed(1);
+            const detail = kind === 'duz' ? 'öndeki duvara ' + f + ' cm' : kind === 'geri' ? 'arkadaki duvara ' + r + ' cm' : 'önde ' + f + ' cm, arkada ' + r + ' cm boşluk; gövde şerit çizgisinin ' + lineGap + ' cm içinde';
+            stopPark('✓ Robotun kararı: ' + PARK_NAMES[kind] + ' — tamamlandı, ' + detail + '.');
+            return [0, 0];
+          }
+          st = park.steps[park.i];
+          v = 0;
+          w = 0;
+        }
+        const head = park.dec ? 'Karar: ' + PARK_NAMES[park.dec.type] : 'Ölçüm yapılıyor';
+        const pz = park.mem.pause;
+        if (pz) {
+          hudMode.textContent = 'Engel: bekliyor';
+          showParkStatus('⏸ ' + (pz.sensor === 'Ön' ? 'Önde' : 'Arkada') + ' engel var (' + Math.round(sonarByName(pz.sensor)) + ' cm). Robot durdu, engel kalkınca devam edecek.');
+        } else {
+          hudMode.textContent = 'Otomatik park';
+          resumeMsgT = Math.max(0, resumeMsgT - dt);
+          showParkStatus((resumeMsgT > 0 ? '▶ Engel kalktı, devam ediliyor · ' : '') + head + ' · ' + st.label);
+        }
+        return [v, w];
+      }
+
+      function updateDrive(dt) {
+        measureSonars();
+        const parkCmd = park ? parkTick(dt) : null;
+        let fwd = 0;
+        let turn = 0;
+        if (parkCmd) {
+          // otomatik park kontrolcüsü hızı doğrudan verir
+        } else if (autoMode) {
+          const front = frontClearance();
+          if (drive.auto === 'fwd') {
+            fwd = Math.max(0.2, Math.min(1, (front - 6) / 30));
+            // Duvara çok yaklaşınca yan sensörlerle hafifçe uzaklaş
+            const sl = Math.min(sonarByName('Sol ön'), sonarByName('Sol arka'));
+            const sr = Math.min(sonarByName('Sağ ön'), sonarByName('Sağ arka'));
+            if (sl < 10) turn = -0.6; else if (sr < 10) turn = 0.6;
+            const frontNear = sonarByName('Ön');
+            if (front < 7 || frontNear < 7) { drive.auto = 'back'; drive.t = 0.45; }
+          } else if (drive.auto === 'back') {
+            fwd = -0.6;
+            drive.t -= dt;
+            if (drive.t <= 0 || sonarByName('Arka') < 14) {
+              // Yan sensörlere bak: hangi taraf daha açıksa oraya dön
+              const left = Math.min(sonarByName('Sol ön'), sonarByName('Sol arka'));
+              const right = Math.min(sonarByName('Sağ ön'), sonarByName('Sağ arka'));
+              drive.auto = 'turn';
+              drive.t = 0.45 + Math.random() * 0.5;
+              drive.dir = Math.abs(left - right) < 5 ? (Math.random() < 0.5 ? 1 : -1) : (left > right ? 1 : -1);
+            }
+          } else {
+            turn = drive.dir;
+            drive.t -= dt;
+            if (drive.t <= 0 && front > 30) drive.auto = 'fwd';
+          }
+        } else {
+          fwd = (keys.f ? 1 : 0) - (keys.b ? 1 : 0);
+          turn = (keys.l ? 1 : 0) - (keys.r ? 1 : 0);
+        }
+
+        const MAXV = 42;
+        const MAXW = 1.8;
+        if (parkCmd) {
+          drive.v = parkCmd[0];
+          drive.w = parkCmd[1];
+        } else {
+          drive.v += (fwd * MAXV - drive.v) * (1 - Math.exp(-5 * dt));
+          drive.w += (turn * MAXW - drive.w) * (1 - Math.exp(-9 * dt));
+        }
+        const prevH = drive.heading;
+        drive.heading += drive.w * dt;
+
+        const p = robotGroup.position;
+        const px = p.x;
+        const pz = p.z;
+        const nx = p.x + Math.sin(drive.heading) * drive.v * dt;
+        const nz = p.z + Math.cos(drive.heading) * drive.v * dt;
+        if (!blockedPose(nx, nz, drive.heading)) {
+          p.x = nx;
+          p.z = nz;
+        } else {
+          if (blockedPose(p.x, p.z, drive.heading)) { drive.heading = prevH; drive.w *= 0.2; }
+          drive.v *= 0.2;
+          if (autoMode && drive.auto === 'fwd') { drive.auto = 'back'; drive.t = 0.45; }
+          if (park) stopPark('Engel algılandı, park durduruldu.');
+        }
+        robotGroup.rotation.y = drive.heading;
+
+        // Kamera robotu takip eder
+        const dx = camFollow ? p.x - px : 0;
+        const dz = camFollow ? p.z - pz : 0;
+        camera.position.x += dx;
+        camera.position.z += dz;
+        controls.target.x += dx;
+        controls.target.z += dz;
+        if (camAnimActive) {
+          camTargetPos.x += dx; camTargetPos.z += dz;
+          camTargetLook.x += dx; camTargetLook.z += dz;
+        }
+
+        // Diferansiyel (tank) sürüş: sol ve sağ tekerlek hızları
+        wheelMeshes.forEach((w) => {
+          const s = w.userData.sideSign;
+          const lin = drive.v + (s > 0 ? -1 : 1) * drive.w * 7.65;
+          w.userData.spinGroup.rotation.x += (lin / 3.25) * dt;
+        });
+
+        // Buzzer: ≤15 cm aralıklı, ≤10 cm sık, <5 cm sürekli
+        const minD = Math.min(...sonarUnits.map((u) => u.dist));
+        const level = minD < ALARM_CM ? 3 : minD <= 10 ? 2 : minD <= 15 ? 1 : 0;
+        setBeepLevel(level);
+        // 15 cm'de saniyede ≈1,4 bip; 5 cm'ye yaklaştıkça sürekli hızlanır (≈8 bip/sn)
+        let beepOn = false;
+        if (level === 3) {
+          beepOn = true;
+          beepPhase = 0;
+        } else if (level > 0) {
+          const k = Math.max(0, Math.min(1, (minD - ALARM_CM) / 10)); // 0: 5 cm, 1: 15 cm
+          const period = 0.12 + k * 0.58;
+          beepPhase = (beepPhase + dt / period) % 1;
+          beepOn = beepPhase < 0.4;
+        } else {
+          beepPhase = 0;
+        }
+        if (beepOn !== buzzState) setBuzz(beepOn);
+
+        sonarUnits.forEach((u) => {
+          if (!u.cone.visible) return;
+          const sc = Math.max(0.05, Math.min(u.dist, 400) / 40);
+          u.cone.scale.set(sc, sc, sc);
+        });
+
+        hudTimer -= dt;
+        if (hudTimer <= 0) {
+          hudTimer = 0.1;
+          hudSpeed.textContent = Math.round(Math.abs(drive.v)) + ' cm/s';
+          sonarUnits.forEach((u, i) => {
+            hudCells[i].textContent = u.dist > 400 ? '400+' : u.dist < 10 ? u.dist.toFixed(1) : Math.round(u.dist);
+            hudCells[i].style.color = u.dist < ALARM_CM ? '#dc2626' : u.dist < 15 ? '#d97706' : '#0f172a';
+          });
+        }
+      }
+
+      window.addEventListener('resize', layoutPanels);
+      layoutPanels();
+
+      // 8f. GERÇEK PARÇALAR GALERİSİ
+      const GALLERY = [
+        { img: 'img/mega.jpg', name: 'Arduino Mega 2560', key: 'arduino' },
+        { img: 'img/shield.jpg', name: 'L293D Motor Shield (HW-130)', key: 'shield' },
+        { img: 'img/hcsr04.jpg', name: 'HC-SR04 Ultrasonik Sensör ×6', key: 'hcsr04' },
+        { img: 'img/tt-motor.jpg', name: 'TT Redüktörlü DC Motor ×4', key: 'motor' },
+        { img: 'img/tekerlek.jpg', name: '65 mm Kauçuk Tekerlek ×4', key: 'wheel' },
+        { img: 'img/sase.jpg', name: '4WD Şasi Kiti', key: 'chassisTop' },
+        { img: 'img/pil-yuvasi.jpg', name: '4×AA Pil Yuvası ×2', key: 'battery' },
+        { img: 'img/jumper.jpg', name: 'Erkek-Erkek Jumper Kablolar', key: 'wiring' },
+        { img: 'img/buzzer.jpg', name: 'Aktif Buzzer', key: 'buzzer' }
+      ];
+      const galleryEl = document.getElementById('gallery');
+      document.getElementById('gallery-grid').innerHTML = GALLERY.map((g, i) =>
+        '<button type="button" data-gi="' + i + '" class="text-left rounded-xl ring-1 ring-slate-200 hover:ring-amber-400 overflow-hidden bg-white transition">' +
+        '<img src="' + g.img + '" alt="' + g.name + '" loading="lazy" class="w-full aspect-[4/3] object-contain bg-white p-2">' +
+        '<div class="px-3 py-2 text-xs font-semibold text-slate-700 border-t border-slate-100">' + g.name + '</div></button>').join('');
+      function setGallery(v) { galleryEl.classList.toggle('hidden', !v); }
+      document.getElementById('btn-gallery').addEventListener('click', () => setGallery(true));
+      document.getElementById('gallery-close').addEventListener('click', () => setGallery(false));
+      galleryEl.addEventListener('click', (e) => {
+        if (e.target === galleryEl) { setGallery(false); return; }
+        const b = e.target.closest('[data-gi]');
+        if (!b) return;
+        const g = GALLERY[+b.dataset.gi];
+        setGallery(false);
+        if (driveMode) setDriveMode(false);
+        selectPart(g.key, true);
+      });
+      window.addEventListener('keydown', (e) => { if (e.key === 'Escape') setGallery(false); });
+
+      // 8g. ADIM ADIM MONTAJ ve PARÇA KÜTÜPHANESİ
+      const [megaGroupRef, shieldGroupRef, buzzerGroupRef] = electronicsGroup.children;
+      const ASM_STEPS = [
+        { title: 'Alt şasi', objs: () => [bottomDeckGroup], from: [0, -6, 0],
+          desc: 'Siyah alt plakayı düz bir zemine koy. Motorlar ve pil yuvaları bu plakaya bağlanacak.' },
+        { title: '4 TT motor', objs: () => motorSubGroups, from: 'side',
+          desc: 'TT motorları T braketlerle alt plakanın dört köşesine vidala. Çift taraflı millerin dışa baktığından emin ol.' },
+        { title: '4 tekerlek', objs: () => wheelMeshes, from: 'side',
+          desc: 'Tekerlekleri motorların D tipi millerine bastırarak tak.' },
+        { title: '2 pil yuvası', objs: () => [batteryLeftSubGroup, batteryRightSubGroup], from: [0, 10, 0],
+          desc: "İki 4'lü pil yuvasını alt plakanın ortasına arka arkaya yerleştir; bant ya da vidayla sabitle." },
+        { title: '6 pirinç aralayıcı', objs: () => [standoffsGroup], from: [0, 8, 0],
+          desc: '6 altıgen pirinç aralayıcıyı M3 vidalarla alt plakaya tak.' },
+        { title: 'Üst şasi', objs: () => [topDeckGroup, topScrewsGroup], from: [0, 12, 0],
+          desc: 'Şeffaf üst plakayı aralayıcıların üstüne koy ve vidala. Motor kablolarını orta delikten yukarı al.' },
+        { title: 'Arduino Mega 2560', objs: () => [megaGroupRef], from: [0, 10, 0],
+          desc: "Mega'yı naylon aralayıcılarla üst plakaya sabitle; USB girişi arkaya baksın." },
+        { title: 'L293D motor shield', objs: () => [shieldGroupRef], from: [0, 8, 0],
+          desc: "Shield'i pinleri hizalayarak Mega'nın üstüne dikkatlice bastır." },
+        { title: '6 HC-SR04 sensör', objs: () => sonarUnits.map((u) => u.group), from: 'out',
+          desc: '6 sensörü braketlerine tak: önde 1, arkada 1, her yanda uçlara yakın 2.' },
+        { title: 'Buzzer', objs: () => [buzzerGroupRef], from: [0, 8, 0],
+          desc: "Buzzer'ı üst plakanın önüne yerleştir; uzun bacak (+) D42'ye, kısa bacak GND'ye." },
+        { title: 'Kablolar', objs: () => [lowerWires, upperWires], from: [0, 0, 0],
+          desc: "Motor kablolarını M1–M4 klemenslerine vidala, sensörleri D22–D33'e, pili EXT_PWR'a bağla. Robot hazır!" }
+      ];
+      let asm = null;   // { step, anims: [], playing, playT }
+      const asmPanel = document.getElementById('asm-panel');
+      const asmAnims = [];
+      function asmVisibleUpTo(step) {
+        ASM_STEPS.forEach((st, i) => st.objs().filter(Boolean).forEach((o) => { o.visible = i <= step; }));
+      }
+      function asmAnimateIn(step) {
+        const st = ASM_STEPS[step];
+        st.objs().filter(Boolean).forEach((o, k) => {
+          if (!o.userData.asmBase) o.userData.asmBase = o.position.clone();
+          let off;
+          if (st.from === 'side') off = new THREE.Vector3(Math.sign(o.userData.asmBase.x || 1) * 9, 3, 0);
+          else if (st.from === 'out') { const u = sonarUnits[k]; off = u.dir.clone().multiplyScalar(8).add(new THREE.Vector3(0, 4, 0)); }
+          else off = new THREE.Vector3(st.from[0], st.from[1], st.from[2]);
+          asmAnims.push({ o, off, t: -k * 0.12, dur: 0.75 });
+        });
+      }
+      function asmRender() {
+        const st = ASM_STEPS[asm.step];
+        document.getElementById('asm-step').textContent = 'Adım ' + (asm.step + 1) + ' / ' + ASM_STEPS.length;
+        document.getElementById('asm-title').textContent = st.title;
+        document.getElementById('asm-desc').textContent = st.desc;
+        document.getElementById('asm-dots').innerHTML = ASM_STEPS.map((s, i) =>
+          '<span class="h-1.5 flex-1 rounded-full ' + (i <= asm.step ? 'bg-amber-400' : 'bg-slate-200') + '"></span>').join('');
+        document.getElementById('asm-play').textContent = asm.playing ? 'Duraklat' : (asm.step === ASM_STEPS.length - 1 ? 'Baştan' : 'Oynat');
+        document.getElementById('asm-prev').disabled = asm.step === 0;
+        document.getElementById('asm-next').disabled = asm.step === ASM_STEPS.length - 1;
+      }
+      function asmGo(step) {
+        asmAnims.forEach((a) => { a.o.position.copy(a.o.userData.asmBase); });
+        asmAnims.length = 0;
+        const forward = step > asm.step;
+        asm.step = step;
+        asmVisibleUpTo(step);
+        if (forward || step === 0) asmAnimateIn(step);
+        asmRender();
+      }
+      function startAssembly() {
+        if (driveMode) setDriveMode(false);
+        closeLibrary();
+        if (isExploded) btnExplode.click();
+        if (!isTopDeckVisible) btnTopDeck.click();
+        explodeProgress = 0;
+        selectPart(null);
+        setPartsOpen(false);
+        setAutoRotate(true);
+        asm = { step: 0, playing: true, playT: 0 };
+        asmPanel.classList.remove('hidden');
+        layoutPanels();
+        asmVisibleUpTo(0);
+        asmAnimateIn(0);
+        asmRender();
+        camTargetPos.copy(CAMERA_PRESETS.iso.pos);
+        camTargetLook.copy(CAMERA_PRESETS.iso.target);
+        camAnimActive = true;
+      }
+      function stopAssembly() {
+        if (!asm) return;
+        asmAnims.forEach((a) => { a.o.position.copy(a.o.userData.asmBase); });
+        asmAnims.length = 0;
+        ASM_STEPS.forEach((st) => st.objs().filter(Boolean).forEach((o) => { o.visible = true; }));
+        topDeckGroup.visible = isTopDeckVisible;
+        topScrewsGroup.visible = isTopDeckVisible;
+        asm = null;
+        asmPanel.classList.add('hidden');
+      }
+      function asmUpdate(dt) {
+        for (let i = asmAnims.length - 1; i >= 0; i--) {
+          const a = asmAnims[i];
+          a.t += dt;
+          const k = Math.max(0, Math.min(1, a.t / a.dur));
+          const e = 1 - Math.pow(1 - k, 3);
+          a.o.position.copy(a.o.userData.asmBase).addScaledVector(a.off, 1 - e);
+          if (k >= 1) asmAnims.splice(i, 1);
+        }
+        if (asm && asm.playing && asmAnims.length === 0) {
+          asm.playT += dt;
+          if (asm.playT > 1.1) {
+            asm.playT = 0;
+            if (asm.step < ASM_STEPS.length - 1) asmGo(asm.step + 1);
+            else { asm.playing = false; asmRender(); }
+          }
+        }
+      }
+      document.getElementById('btn-assembly').addEventListener('click', () => (asm ? stopAssembly() : startAssembly()));
+      document.getElementById('asm-close').addEventListener('click', stopAssembly);
+      document.getElementById('asm-prev').addEventListener('click', () => { asm.playing = false; asmGo(Math.max(0, asm.step - 1)); });
+      document.getElementById('asm-next').addEventListener('click', () => { asm.playing = false; asmGo(Math.min(ASM_STEPS.length - 1, asm.step + 1)); });
+      document.getElementById('asm-play').addEventListener('click', () => {
+        if (asm.playing) { asm.playing = false; asmRender(); return; }
+        if (asm.step === ASM_STEPS.length - 1) asmGo(0);
+        asm.playing = true;
+        asm.playT = 0;
+        asmRender();
+      });
+
+      // ---- Parça kütüphanesi: her parça tek başına (3D küçük resim + yalıtılmış inceleme)
+      const libEl = document.getElementById('library');
+      const isoPanel = document.getElementById('iso-panel');
+      let iso = null;   // { key, saved: Map }
+      function partInstanceMeshes(key) {
+        const all = (partMeshesByKey[key] || []);
+        if (!all.length) return [];
+        const labels = new Set(all.map((m) => m.userData.partLabel));
+        if (labels.size === 1 || key === 'wiring') return all;
+        const first = all[0].userData.partLabel;
+        return all.filter((m) => m.userData.partLabel === first);
+      }
+      function withIsolation(meshes, fn) {
+        const saved = new Map();
+        const target = new Set(meshes);
+        robotGroup.traverse((o) => saved.set(o, o.visible));
+        saved.set(worldGroup, worldGroup.visible);
+        saved.set(shadowGround, shadowGround.visible);
+        robotGroup.traverse((o) => {
+          if (o.isMesh) o.visible = target.has(o);
+          else if (o.isLine) o.visible = target.has(o.parent);
+          else o.visible = true;
+        });
+        worldGroup.visible = false;
+        if (fn) { fn(); saved.forEach((v, o) => { o.visible = v; }); return null; }
+        return saved;
+      }
+      function fitBox(meshes) {
+        const box = new THREE.Box3();
+        meshes.forEach((m) => box.expandByObject(m));
+        return { center: box.getCenter(new THREE.Vector3()), size: Math.max(2, box.getSize(new THREE.Vector3()).length()) };
+      }
+      // Küçük resimler ana çiziciyle ekran dışı bir hedefe çizilir
+      let libThumbs = null;
+      function makeThumbs() {
+        const W = 320, H = 240;
+        const rt = new THREE.WebGLRenderTarget(W, H);
+        rt.texture.encoding = THREE.sRGBEncoding;
+        const cam = new THREE.PerspectiveCamera(32, W / H, 0.1, 400);
+        const buf = new Uint8Array(W * H * 4);
+        const cv = document.createElement('canvas');
+        cv.width = W; cv.height = H;
+        const ctx = cv.getContext('2d');
+        const out = {};
+        robotGroup.updateMatrixWorld(true);
+        PART_ORDER.forEach((key) => {
+          const meshes = partInstanceMeshes(key);
+          if (!meshes.length) return;
+          withIsolation(meshes, () => {
+            const f = fitBox(meshes);
+            cam.position.copy(f.center).add(new THREE.Vector3(-0.75, 0.62, 0.9).normalize().multiplyScalar(f.size * 1.35));
+            cam.lookAt(f.center);
+            renderer.setRenderTarget(rt);
+            renderer.setClearColor(0xffffff, 0);
+            renderer.clear();
+            renderer.render(scene, cam);
+            renderer.readRenderTargetPixels(rt, 0, 0, W, H, buf);
+            renderer.setRenderTarget(null);
+          });
+          const img = ctx.createImageData(W, H);
+          for (let y = 0; y < H; y++) img.data.set(buf.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+          ctx.clearRect(0, 0, W, H);
+          ctx.putImageData(img, 0, 0);
+          out[key] = cv.toDataURL('image/png');
+        });
+        rt.dispose();
+        return out;
+      }
+      function openLibrary() {
+        if (driveMode) setDriveMode(false);
+        stopAssembly();
+        try { if (!libThumbs) libThumbs = makeThumbs(); } catch (err) { libThumbs = {}; }
+        document.getElementById('library-grid').innerHTML = PART_ORDER.map((k) => {
+          const p = PART_INFO[k];
+          const thumb = libThumbs[k];
+          return '<button type="button" data-lk="' + k + '" class="text-left rounded-xl ring-1 ring-slate-200 hover:ring-amber-400 bg-white overflow-hidden transition">' +
+            '<div class="relative bg-gradient-to-b from-slate-50 to-slate-100">' +
+            (thumb ? '<img src="' + thumb + '" alt="' + p.name + ' 3D görünümü" class="w-full aspect-[4/3] object-contain">' : '<div class="w-full aspect-[4/3]"></div>') +
+            (p.img ? '<img src="' + p.img + '" alt="" class="absolute right-1.5 bottom-1.5 w-12 h-12 object-contain bg-white rounded-lg ring-1 ring-slate-200 p-0.5">' : '') +
+            '</div><div class="px-3 py-2 border-t border-slate-100"><div class="text-xs font-semibold text-slate-800">' + p.name + '</div>' +
+            '<div class="text-[11px] text-slate-500">' + p.cat + (typeof p.qty === 'number' ? ' · ' + p.qty + ' adet' : '') + '</div></div></button>';
+        }).join('');
+        libEl.classList.remove('hidden');
+      }
+      function closeLibrary() { libEl.classList.add('hidden'); }
+      function isolatePart(key) {
+        if (iso) endIsolation(false);
+        closeLibrary();
+        if (isExploded) btnExplode.click();
+        const meshes = partInstanceMeshes(key);
+        if (!meshes.length) return;
+        robotGroup.updateMatrixWorld(true);
+        iso = { key, saved: withIsolation(meshes) };
+        const f = fitBox(meshes);
+        camTargetLook.copy(f.center);
+        camTargetPos.copy(f.center).add(new THREE.Vector3(-0.75, 0.62, 0.9).normalize().multiplyScalar(Math.max(13, f.size * 1.6)));
+        camAnimActive = true;
+        controls.minDistance = 4;
+        setAutoRotate(true);
+        setPartsOpen(false);
+        selectPart(key, false);
+        applyHighlight(null);
+        setAutoRotate(true);
+        const i = PART_ORDER.indexOf(key);
+        document.getElementById('iso-title').textContent = PART_INFO[key].name;
+        document.getElementById('iso-count').textContent = (i + 1) + ' / ' + PART_ORDER.length;
+        isoPanel.classList.remove('hidden');
+        layoutPanels();
+      }
+      function endIsolation(resetCam) {
+        if (!iso) return;
+        iso.saved.forEach((v, o) => { o.visible = v; });
+        iso = null;
+        isoPanel.classList.add('hidden');
+        controls.minDistance = 12;
+        selectPart(null);
+        if (resetCam !== false) {
+          camTargetPos.copy(CAMERA_PRESETS.iso.pos);
+          camTargetLook.copy(CAMERA_PRESETS.iso.target);
+          camAnimActive = true;
+        }
+      }
+      function isoStep(d) {
+        if (!iso) return;
+        const i = (PART_ORDER.indexOf(iso.key) + d + PART_ORDER.length) % PART_ORDER.length;
+        isolatePart(PART_ORDER[i]);
+      }
+      document.getElementById('btn-library').addEventListener('click', openLibrary);
+      document.getElementById('library-close').addEventListener('click', closeLibrary);
+      libEl.addEventListener('click', (e) => {
+        if (e.target === libEl) { closeLibrary(); return; }
+        const b = e.target.closest('[data-lk]');
+        if (b) isolatePart(b.dataset.lk);
+      });
+      document.getElementById('iso-prev').addEventListener('click', () => isoStep(-1));
+      document.getElementById('iso-next').addEventListener('click', () => isoStep(1));
+      document.getElementById('iso-close').addEventListener('click', () => endIsolation(true));
+      document.getElementById('iso-library').addEventListener('click', () => { endIsolation(false); openLibrary(); });
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { closeLibrary(); }
+        if (iso && e.key === 'ArrowRight') isoStep(1);
+        if (iso && e.key === 'ArrowLeft') isoStep(-1);
+      });
+      window.addEventListener('load', layoutPanels);
+      setTimeout(layoutPanels, 400);
+      setTimeout(layoutPanels, 1500);
+
+      // 9. ANA ANİMASYON DÖNGÜSÜ
+      const clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.05);
+
+        // Yumuşak kamera önayar geçişi
+        if (camAnimActive) {
+          camera.position.lerp(camTargetPos, 1 - Math.exp(-6 * dt));
+          controls.target.lerp(camTargetLook, 1 - Math.exp(-6 * dt));
+          if (
+            camera.position.distanceTo(camTargetPos) < 0.05 &&
+            controls.target.distanceTo(camTargetLook) < 0.05
+          ) {
+            camAnimActive = false;
+          }
+        }
+
+        // Patlatılmış görünüm enterpolasyonu
+        const targetExplode = isExploded ? 1 : 0;
+        explodeProgress += (targetExplode - explodeProgress) * (1 - Math.exp(-7 * dt));
+
+        if (explodeProgress > 0.0005 || isExploded) {
+          const e = explodeProgress;
+          topDeckGroup.position.y   = e * 5.2;
+          topScrewsGroup.position.y = e * 7.4;
+          standoffsGroup.position.y = e * 2.4;
+          batteryGroup.position.y   = 2.20 + e * 2.8;
+          batteryLeftSubGroup.position.z  =  e * 1.4;
+          batteryRightSubGroup.position.z = -e * 1.4;
+
+          motorSubGroups.forEach((m) => {
+            m.position.x = m.userData.basePos.x + m.userData.sideSign * e * 2.2;
+          });
+          wheelMeshes.forEach((w) => {
+            w.position.x = w.userData.basePos.x + w.userData.sideSign * e * 4.5;
+          });
+          electronicsGroup.position.y = e * 9.0;
+          sensorGroup.position.set(0, e * 9.5, 0);
+          sonarUnits.forEach((u) => { u.group.position.copy(u.base).addScaledVector(u.dir, e * 3.0); });
+          shieldGroup.position.y = SHIELD_BASE_Y + e * 2.5;
+        }
+
+        // Motor testi açıkken tekerlek dönüşü
+        if (isDriving) {
+          wheelMeshes.forEach((w) => {
+            w.userData.spinGroup.rotation.x += dt * 7.5;
+          });
+        }
+
+        if (driveMode) {
+          updateDrive(dt);
+        } else {
+          sonarUnits.forEach((u) => u.cone.scale.set(1, 1, 1));
+        }
+
+        // Kablolar yalnızca birleşik görünümde
+        const asmWires = !asm || asm.step >= ASM_STEPS.length - 1;
+        lowerWires.visible = explodeProgress < 0.02 && asmWires;
+        upperWires.visible = explodeProgress < 0.02 && isTopDeckVisible && asmWires;
+
+        // Seçili parçanın yumuşak parlaması
+        if (selectedKey) {
+          const k = 0.25 + 0.2 * Math.sin(clock.elapsedTime * 4);
+          hlCache.forEach((m) => { if (m.emissive) m.emissiveIntensity = k; });
+        }
+
+        asmUpdate(dt);
+
+        // Gölge ışığı robotu takip eder
+        keyLight.position.set(robotGroup.position.x - 16, 28, robotGroup.position.z + 18);
+        keyLight.target.position.set(robotGroup.position.x, 0, robotGroup.position.z);
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      setDriveMode(true);
+      animate();
+    })();
+  </script>
+</body>
+</html>
