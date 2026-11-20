@@ -1615,7 +1615,10 @@
       const PIVOT_R = Math.hypot(11.6, 9);   // yerinde dönerken gövdenin süpürdüğü yarıçap (≈ 14,7 cm)
       const SIDE_Z = 6.4;            // yan ön sensörlerin araç ortasına göre boyuna konumu (uca yakın)
       const SCAN_END_Z = 92;
-      const SNUG_CM = 5;             // paralel parkta sağ sensörlerin kaldırıma bırakacağı mesafe
+      const MIN_GAP_CM = 2;          // park ve otonom sürüşte engele en fazla bu kadar yaklaşılır (cm)
+      const PARK_SERIT_EN = 28;      // paralel park şeridinin eni: kaldırımdan çizgiye (ÖLÇ)
+      const CIZGI_ICERI_CM = 5;      // paralel parkta gövde çizgiden bu kadar içeride kalır
+      const ROBOT_EN = 18;           // tekerlek dışından dışa
       const SIDE_SX = 6.1;           // yan sensörün araç ortasına yanal uzaklığı
       // Karar kuralları (gerçek araçta da aynı eşikler kullanılabilir)
       const RULES = {
@@ -1775,7 +1778,10 @@
           return [
             { type: 'lineTo', z: dec.c - PERP_R, speed: 16, label: 'Dönüş noktasına geri gelindi' },
             { type: 'arc', h: Math.PI / 2, R: PERP_R, speed: 14, label: 'Burunla park yerine giriliyor' },
-            { type: 'line', h: Math.PI / 2, px: 0, pz: dec.c, speed: 16, slow: (P, son) => Math.max(4, (son('Ön') - STOP_CM) * 1.2), until: (P, son) => son('Ön') <= STOP_CM, label: 'Ön sensörle duvara yaklaşılıyor' }
+            { type: 'line', h: Math.PI / 2, px: 0, pz: dec.c, speed: 16, slow: (P, son) => Math.max(4, (son('Ön') - STOP_CM) * 1.2), until: (P, son) => son('Ön') <= STOP_CM, label: 'Ön sensörle duvara yaklaşılıyor' },
+            { type: 'shift', mode: 'center', h0: Math.PI / 2, label: 'Sağda ve solda eşit boşluk bırakılıyor' },
+            { type: 'line', h: Math.PI / 2, px: 0, pz: dec.c, speed: 6, free: true, slow: (P, son) => Math.max(2, (son('Ön') - STOP_CM) * 1.2), until: (P, son) => son('Ön') <= STOP_CM + 0.3, label: 'Duvara son yaklaşma' },
+            { type: 'turn', h: Math.PI / 2, label: 'Son hizalama' }
           ];
         }
         if (dec.type === 'geri') {
@@ -1783,7 +1789,10 @@
             { type: 'lineTo', z: dec.c + PERP_R, speed: 16, label: 'Park yerinin önünden geçiliyor' },
             { type: 'wait', dur: 0.5, label: 'Geri vitese geçiliyor' },
             { type: 'arc', h: -Math.PI / 2, R: PERP_R, rev: true, speed: 13, label: 'Geri geri park yerine dönülüyor' },
-            { type: 'line', h: -Math.PI / 2, px: 0, pz: dec.c, rev: true, speed: 14, slow: (P, son) => Math.max(4, (son('Arka') - STOP_CM) * 1.2), until: (P, son) => son('Arka') <= STOP_CM, label: 'Arka sensörle duvara yaklaşılıyor' }
+            { type: 'line', h: -Math.PI / 2, px: 0, pz: dec.c, rev: true, speed: 14, slow: (P, son) => Math.max(4, (son('Arka') - STOP_CM) * 1.2), until: (P, son) => son('Arka') <= STOP_CM, label: 'Arka sensörle duvara yaklaşılıyor' },
+            { type: 'shift', mode: 'center', h0: -Math.PI / 2, label: 'Sağda ve solda eşit boşluk bırakılıyor' },
+            { type: 'line', h: -Math.PI / 2, px: 0, pz: dec.c, rev: true, speed: 6, free: true, slow: (P, son) => Math.max(2, (son('Arka') - STOP_CM) * 1.2), until: (P, son) => son('Arka') <= STOP_CM + 0.3, label: 'Duvara son yaklaşma' },
+            { type: 'turn', h: -Math.PI / 2, label: 'Son hizalama' }
           ];
         }
         // Paralel park (raporundaki yöntem): boşluğun ortasında yerinde 90° kaldırıma dön, boşluğa gir,
@@ -1793,10 +1802,10 @@
           { type: 'turn', h: -Math.PI / 2, label: 'Yerinde 90° kaldırıma doğru dönülüyor' },
           { type: 'exitX', x: dec.targetX, inc: false, label: 'Boşluğa giriliyor' },
           { type: 'turn', h: 0, label: 'Yerinde 90° dönüp kaldırıma paralel olunuyor' },
-          { type: 'center', h: 0, label: 'Ön ve arka sensörle ortalanıyor' },
-          { type: 'snug', label: 'Sağ sensörler kaldırıma ' + SNUG_CM + ' cm kalana kadar yanaşılıyor' },
+          { type: 'shift', mode: 'curb', h0: 0, label: 'Çizgiden ' + CIZGI_ICERI_CM + ' cm içeri yanaşılıyor' },
+          { type: 'center', h: 0, label: 'Önde ve arkada eşit boşluk bırakılıyor' },
           { type: 'turn', h: 0, label: 'Son hizalama' }
-        ].filter((st) => !(dec.early && st.type === 'center'));
+        ];
       }
 
       // Bir adımı çalıştırır: [v (cm/s), w (rad/s), bitti mi]
@@ -1824,9 +1833,10 @@
           }
           case 'line': {
             if (st.until(P, son, mem)) return [0, 0, true];
+            if (st.free && st.t > 8) return [0, 0, true];
             let sp = ramp(st.speed);
             if (st.slow) sp = Math.min(sp, st.slow(P, son, mem));
-            return [(st.rev ? -1 : 1) * sp, laneW(st.h, st.rev, st.px, st.pz), false];
+            return [(st.rev ? -1 : 1) * sp, st.free ? clampN(3 * wrapA(st.h - P.h), 0.8) : laneW(st.h, st.rev, st.px, st.pz), false];
           }
           case 'lineTo': {
             const dz = st.z - P.z;
@@ -1836,8 +1846,9 @@
             return [(rev ? -1 : 1) * sp, laneW(0, rev, LANE_X, 0), false];
           }
           case 'center': {
+            if (son('Ön') > 60 || son('Arka') > 60) return [0, 0, true];   // bir tarafta engel yok: ortalanacak şey yok
             const diff = son('Ön') - son('Arka');
-            if (Math.abs(diff) < 1.2) return [0, 0, true];
+            if (Math.abs(diff) < 0.6) return [0, 0, true];
             const v = clampN(diff * 0.8, 10);
             return [Math.sign(v) * Math.max(Math.abs(v), 3), clampN(3 * wrapA(st.h - P.h), 0.8), false];
           }
@@ -1847,38 +1858,56 @@
             // başlığı koruyarak belli bir yol git (ileri +, geri −)
             if (!st.p0) st.p0 = { x: P.x, z: P.z };
             const done = Math.hypot(P.x - st.p0.x, P.z - st.p0.z);
-            const ahead = son(st.d > 0 ? 'Ön' : 'Arka') - 3;   // gördüğü engele 3 cm'den fazla yaklaşma
+            const ahead = son(st.d > 0 ? 'Ön' : 'Arka') - (MIN_GAP_CM + 1);   // gördüğü engele fazla yaklaşma
             const rem = Math.min(Math.abs(st.d) - done, ahead);
             if (rem <= 0.2) return [0, 0, true];
             const sp = Math.min(6, rem * 2 + 1.5);
             return [Math.sign(st.d) * sp, clampN(3 * wrapA(st.h - P.h), 0.8), false];
           }
-          case 'snug': {
-            // Kaldırıma yanaşma: küçük açıyla bir ileri bir geri giderek yana kay (sağ sensörler ≈ SNUG_CM)
+          case 'shift': {
+            // Yana kayma: küçük açıyla bir ileri bir geri (ileri giderken kayılacak yöne, geri giderken öbür yöne dönük)
             if (st.sub && st.sub.length) {
               const r = runParkStep(st.sub[0], P, dt, son, mem);
               if (r[2]) st.sub.shift();
               return [r[0], r[1], false];
             }
             st.n = (st.n || 0) + 1;
-            const sR = Math.min(son('Sağ ön'), son('Sağ arka'));
-            const c = sR + SIDE_SX;             // araç ortası - kaldırım
-            const goal = SNUG_CM + SIDE_SX;
-            if (!Number.isFinite(sR) || sR > 40 || c - goal < 0.4 || st.n > 20) return [0, 0, true];
-            st.dir = st.dir ? -st.dir : 1;
-            let room = (st.dir > 0 ? son('Ön') : son('Arka')) - 5;
-            if (room < 1) { st.dir = -st.dir; room = (st.dir > 0 ? son('Ön') : son('Arka')) - 5; }
-            if (room < 1) return [0, 0, true];
-            const dMax = Math.min(6, room);
-            let th = 0;
-            for (let a = 25; a >= 2; a -= 0.5) {
-              const r = a * Math.PI / 180;
-              if (c - 9 * Math.cos(r) - (11.6 + dMax) * Math.sin(r) >= 1.0) { th = r; break; }
+            const L = Math.min(son('Sol ön'), son('Sol arka')) + SIDE_SX;   // araç ortasından soldaki engele
+            const R = Math.min(son('Sağ ön'), son('Sağ arka')) + SIDE_SX;
+            let delta;   // + sola, − sağa kayılacak (cm)
+            if (st.mode === 'curb') {
+              if (!(R < 46)) return [0, 0, true];
+              const want = ROBOT_EN / 2 + (PARK_SERIT_EN - CIZGI_ICERI_CM - ROBOT_EN);   // ortadan kaldırıma
+              delta = want - R;
+            } else {
+              if (!(L < 46) || !(R < 46)) return [0, 0, true];   // bir yanda araç yok: ortalanacak şey yok
+              delta = (L - R) / 2;
             }
-            if (!th) return [0, 0, true];
-            const d = Math.min(dMax, (c - goal) / Math.sin(th));
-            const h1 = st.dir > 0 ? -th : th;   // ileri giderken sağa, geri giderken sola dönük: ikisi de kaldırıma yaklaştırır
-            st.sub = [{ type: 'turn', h: h1 }, { type: 'moveD', d: st.dir * d, h: h1 }, { type: 'turn', h: 0 }];
+            if (Math.abs(delta) < 0.25 || st.n > 24) return [0, 0, true];
+            const sg = Math.sign(delta);
+            const cS = sg > 0 ? L : R, cO = sg > 0 ? R : L;
+            const pay = MIN_GAP_CM + 0.5;
+            const fr = son('Ön') + 10.5, bk = son('Arka') + 11.4;
+            st.dir = st.dir ? -st.dir : 1;
+            const pick = (dir) => {
+              let best = null;
+              for (let a = 1; a <= 25; a += 0.5) {
+                const r = a * Math.PI / 180, sn = Math.sin(r), cs = Math.cos(r);
+                const ext = 11.6 * cs + 9 * sn, extB = 11.3 * cs + 9 * sn;
+                if (fr - ext < pay || bk - extB < pay) continue;           // yerinde dönüş sığmıyor
+                if (cO - 9 * cs - 11.6 * sn < pay) continue;               // öbür yandaki köşe
+                let d = Math.min(6, (dir > 0 ? fr - ext : bk - extB) - pay, Math.abs(delta) / sn);
+                d = Math.min(d, (cS - 9 * cs - pay) / sn - 11.6);          // kayılan yandaki köşe
+                if (d < 0.5) continue;
+                if (!best || d * sn > best.sh + 0.01) best = { r, d, sh: d * sn };
+              }
+              return best;
+            };
+            let bp = pick(st.dir);
+            if (!bp) { st.dir = -st.dir; bp = pick(st.dir); }
+            if (!bp) return [0, 0, true];
+            const h1 = st.h0 + (st.dir > 0 ? sg : -sg) * bp.r;
+            st.sub = [{ type: 'turn', h: h1 }, { type: 'moveD', d: st.dir * bp.d, h: h1 }, { type: 'turn', h: st.h0 }];
             return [0, 0, false];
           }
           case 'exitX': {
@@ -1943,7 +1972,7 @@
             // Şehir: boşluk yeterince uzadıysa sonunu beklemeden karar ver (ilk uygun yere park)
             if (st.early && B.ph === 'open' && openR && zR - B.g0 >= st.early && B.maxO <= 60 && B.lastCarX !== undefined) {
               const curbX = Math.max(B.curbX, B.lastCarX - 30);
-              const targetX = curbX + PIVOT_R + 1.8;
+              const targetX = curbX + PIVOT_R + 2.6;
               if (targetX <= Math.max(B.lastCarX, -20) - 9 + 3) {
                 log('Sağ', 'Kaldırımda ' + Math.round(zR - B.g0) + ' cm boşluk (≥ ' + st.early + ' cm) → PARALEL PARK', true);
                 mem.decision = { type: 'paralel', len: zR - B.g0, c: B.g0 + st.early / 2 + 1, targetX, early: true };
@@ -1962,7 +1991,7 @@
                 // park etmiş araçların hizasından 3 cm'den fazla dışarı taşacaksa şerit dar demektir
                 const carSideX = P.x - 6.1 - sR;
                 const curbX = B.curbX !== undefined ? B.curbX : carSideX - 22;
-                const targetX = curbX + PIVOT_R + 1.8;
+                const targetX = curbX + PIVOT_R + 2.6;
                 if (targetX > carSideX - 9 + 3) log('Sağ', 'Boşluk ' + Math.round(len) + ' cm ama şerit dar → geç', false);
                 else {
                   log('Sağ', 'Boşluk ' + Math.round(len) + ' cm (≥ ' + RULES.parMinLen + ' cm) → PARALEL PARK', true);
@@ -2024,7 +2053,7 @@
           const prev = mem.prevD && mem.prevD.sensor === sensor && steady ? mem.prevD.d : null;
           // Yalnızca yakına (40 cm içine) aniden giren cisimler engel sayılır; uzaktaki ölçüm sıçramaları değil
           if (prev !== null && d < 40 && prev - d - Math.abs(v) * dt > ANI_DUSUS_CM) hit = { mode: 'drop', ref: Math.min(prev, 60) };
-          else if (d < 3) hit = { mode: 'guard', limit: 3 };
+          else if (d < MIN_GAP_CM) hit = { mode: 'guard', limit: MIN_GAP_CM };
         }
         mem.prevD = { sensor, d, h: P.h };
         if (hit) {
@@ -2552,20 +2581,24 @@
         }
         return best <= far ? best : Infinity;
       }
-      function cityBlocked(C, x, z, h) {
+      function cityBlocked(C, x, z, h, m) {
+        if (m === undefined) m = 0.3;
         const c = Math.cos(h), sn = Math.sin(h);
         for (const [lx, lz] of ROBOT_FOOT) {
           const wx = x + lx * c + lz * sn, wz = z - lx * sn + lz * c;
-          const arr = C.grid.get(Math.floor(wx / GRID_CELL) + ',' + Math.floor(wz / GRID_CELL));
-          if (arr) for (const b of arr) if (b.active && wx > b.minX - 0.3 && wx < b.maxX + 0.3 && wz > b.minZ - 0.3 && wz < b.maxZ + 0.3) return b;
+          const gx = Math.floor(wx / GRID_CELL), gz = Math.floor(wz / GRID_CELL);
+          for (let ix = gx - (m > 0.5 ? 1 : 0); ix <= gx + (m > 0.5 ? 1 : 0); ix++) for (let iz = gz - (m > 0.5 ? 1 : 0); iz <= gz + (m > 0.5 ? 1 : 0); iz++) {
+            const arr = C.grid.get(ix + ',' + iz);
+            if (arr) for (const b of arr) if (b.active && wx > b.minX - m && wx < b.maxX + m && wz > b.minZ - m && wz < b.maxZ + m) return b;
+          }
           for (const k of C.cars) {
             const ex = wx - k.x, ez = wz - k.z;
             if (ex * ex + ez * ez > 400) continue;
             const kc = Math.cos(k.h), ks = Math.sin(k.h);
             const ux = ex * kc - ez * ks, uz = ex * ks + ez * kc;
-            if (Math.abs(ux) < CAR_W / 2 + 0.3 && Math.abs(uz) < CAR_L / 2 + 0.3) return k;
+            if (Math.abs(ux) < CAR_W / 2 + m && Math.abs(uz) < CAR_L / 2 + m) return k;
           }
-          for (const p of C.peds) if ((wx - p.x) * (wx - p.x) + (wz - p.z) * (wz - p.z) < 3.5 * 3.5) return p;
+          for (const p of C.peds) if ((wx - p.x) * (wx - p.x) + (wz - p.z) * (wz - p.z) < (3.2 + m) * (3.2 + m)) return p;
         }
         return null;
       }
@@ -4367,15 +4400,22 @@
       const FOOT = [];
       [-9, -4.5, 0, 4.5, 9].forEach((x) => { FOOT.push([x, 11.6], [x, -11.3]); });
       [-5.8, 0, 5.8].forEach((z) => { FOOT.push([9, z], [-9, z]); });
-      function blockedPose(x, z, h) {
-        if (cityMode() && cityBlocked(city, x, z, h)) return true;
+      // Gövdenin en yakın engele boşluğu (0,3 cm adımlarla): 0 = değiyor
+      function gapLevel(x, z, h) {
+        let g = 0;
+        for (const m of [0.3, 0.6, 0.9, 1.2, 1.5, MIN_GAP_CM]) { if (blockedPose(x, z, h, m)) break; g = m; }
+        return g;
+      }
+      function blockedPose(x, z, h, m) {
+        if (m === undefined) m = 0.3;
+        if (cityMode() && cityBlocked(city, x, z, h, m)) return true;
         const c = Math.cos(h);
         const sn = Math.sin(h);
         for (const [lx, lz] of FOOT) {
           const wx = x + lx * c + lz * sn;
           const wz = z - lx * sn + lz * c;
           for (const b of obstacleBoxes) {
-            if (wx > b.minX - 0.3 && wx < b.maxX + 0.3 && wz > b.minZ - 0.3 && wz < b.maxZ + 0.3) return true;
+            if (wx > b.minX - m && wx < b.maxX + m && wz > b.minZ - m && wz < b.maxZ + m) return true;
           }
         }
         return false;
@@ -4585,7 +4625,11 @@
           const where = R.lot ? R.lot.name : (R.lane ? R.lane.road.name : 'yol kenarı');
           const f = Math.round(sonarByName('Ön')), r = Math.round(sonarByName('Arka'));
           const sr = Math.round(Math.min(sonarByName('Sağ ön'), sonarByName('Sağ arka')) * 10) / 10;
-          stopPark('✓ ' + where + ': ' + PARK_NAMES[kind] + ' tamamlandı (önde ' + f + ' cm, arkada ' + r + ' cm' + (kind === 'paralel' ? ', kaldırıma ' + String(sr).replace('.', ',') + ' cm' : '') + ').');
+          const cm = (v) => String(Math.round(v * 10) / 10).replace('.', ',') + ' cm';
+          const lx = frameToL(R.frame, robotGroup.position.x, robotGroup.position.z)[0];
+          const sl = Math.min(sonarByName('Sol ön'), sonarByName('Sol arka'));
+          const det = kind === 'paralel' ? 'önde ' + cm(sonarByName('Ön')) + ' / arkada ' + cm(sonarByName('Arka')) + ', gövde çizginin ' + cm(-16 - (lx + 9)) + ' içinde' : (kind === 'duz' ? 'duvara ' + f + ' cm' : 'duvara ' + r + ' cm') + (sl < 46 && sr < 46 ? ', solda ' + cm(sl) + ' / sağda ' + cm(sr) : '');
+          stopPark('✓ ' + where + ': ' + PARK_NAMES[kind] + ' tamamlandı (' + det + ').');
           return [0, 0];
         }
         hudMode.textContent = R.state === 'lane' || R.state === 'conn' ? 'Şehirde sürüş' : 'Otomatik park';
@@ -4622,9 +4666,12 @@
             const kind = park.dec.type;
             const f = Math.round(sonarByName('Ön'));
             const r = Math.round(sonarByName('Arka'));
-            const lineGap = (-16.45 - (robotGroup.position.x + 9)).toFixed(1);
+            const lineGap = (-16 - (robotGroup.position.x + 9)).toFixed(1).replace('.', ',');
             const sr = Math.round(Math.min(sonarByName('Sağ ön'), sonarByName('Sağ arka')) * 10) / 10;
-            const detail = kind === 'duz' ? 'öndeki duvara ' + f + ' cm' : kind === 'geri' ? 'arkadaki duvara ' + r + ' cm' : 'önde ' + f + ' cm, arkada ' + r + ' cm, kaldırıma ' + String(sr).replace('.', ',') + ' cm; gövde şerit çizgisinin ' + lineGap + ' cm içinde';
+            const sl = Math.round(Math.min(sonarByName('Sol ön'), sonarByName('Sol arka')) * 10) / 10;
+            const cm = (v) => String(Math.round(v * 10) / 10).replace('.', ',') + ' cm';
+            const sides = sl < 46 && sr < 46 ? ', solda ' + cm(sl) + ' / sağda ' + cm(sr) : '';
+            const detail = kind === 'duz' ? 'öndeki duvara ' + f + ' cm' + sides : kind === 'geri' ? 'arkadaki duvara ' + r + ' cm' + sides : 'önde ' + cm(sonarByName('Ön')) + ' / arkada ' + cm(sonarByName('Arka')) + ', gövde çizginin ' + lineGap + ' cm içinde';
             stopPark('✓ Robotun kararı: ' + PARK_NAMES[kind] + ' — tamamlandı, ' + detail + '.');
             return [0, 0];
           }
@@ -4794,14 +4841,24 @@
         const pz = p.z;
         const nx = p.x + Math.sin(drive.heading) * drive.v * dt;
         const nz = p.z + Math.cos(drive.heading) * drive.v * dt;
-        if (!blockedPose(nx, nz, drive.heading)) {
+        // Otonom sürüşte ve parkta gövde engele MIN_GAP_CM'den (2 cm) fazla yaklaşmaz
+        const guard = !!park || autoMode;
+        let allowed = !blockedPose(nx, nz, drive.heading);
+        if (allowed && guard && blockedPose(nx, nz, drive.heading, MIN_GAP_CM)) {
+          // zaten 2 cm'den yakınsa yalnız uzaklaştıran harekete izin ver
+          allowed = gapLevel(nx, nz, drive.heading) > gapLevel(p.x, p.z, prevH);
+        }
+        if (allowed) {
           p.x = nx;
           p.z = nz;
         } else {
-          if (blockedPose(p.x, p.z, drive.heading)) { drive.heading = prevH; drive.w *= 0.2; }
+          drive.heading = prevH; drive.w *= 0.2;
           drive.v *= 0.2;
-          if (autoMode && drive.auto === 'fwd') { drive.auto = 'back'; drive.t = 0.45; }
-          if (park) stopPark('Engel algılandı, park durduruldu.');
+          if (autoMode) {
+            if (drive.auto === 'back') { drive.auto = 'turn'; drive.dir = -(drive.dir || 1); drive.t = 0.5; }
+            else { drive.auto = 'back'; drive.t = 0.45; }
+          }
+          if (park) stopPark('Engele 2 cm kaldı: güvenlik için park durduruldu.');
         }
         robotGroup.rotation.y = drive.heading;
 
