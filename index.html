@@ -139,13 +139,14 @@
         <div id="hud-alarm" class="hidden w-full text-center text-xs font-bold text-white rounded-lg px-3 py-1.5"></div>
         <div class="w-full flex flex-wrap items-center justify-center gap-2">
           <div class="flex bg-slate-100/90 p-1 rounded-xl gap-1" role="group" aria-label="Sürüş alanı">
-            <button type="button" data-layout="park" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm">Otopark</button>
+            <button type="button" data-layout="park" data-map="otopark" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm">Otopark</button>
+            <button type="button" data-layout="park" data-map="cadde" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600">Cadde</button>
             <button type="button" data-layout="free" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600">Serbest Sürüş</button>
           </div>
           <div id="park-controls" class="hidden flex flex-wrap items-center gap-1.5">
             <button type="button" id="btn-autopark" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-400 text-slate-900 shadow-sm">Otomatik Park Et</button>
             <button type="button" id="btn-obstacle" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-orange-500 text-white shadow-sm">Engel Koy</button>
-            <button type="button" id="btn-newlot" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Yeni Otopark</button>
+            <button type="button" id="btn-newlot" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Yeni Düzen</button>
             <button type="button" id="btn-park-reset" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Başa Dön</button>
           </div>
         </div>
@@ -1603,7 +1604,8 @@
       }
       const BAY_ZS = [-45, -15, 15, 45, 75];
       const PROB = { car: 0.58, empty: 0.32, offset: 4, small: 0.55, medium: 0.25 };
-      function makeLot(seed) {
+      function makeLot(seed, kind) {
+        if (kind === 'cadde') return makeStreet(seed);
         const rnd = mulberry32(seed);
         const lot = { seed, bays: [], parCars: [], boxes: [] };
         const add = (kind, x, z, w, d, h) => lot.boxes.push({ kind, x, z, w, d, h, minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
@@ -1638,13 +1640,84 @@
           lot.boxes = lot.boxes.filter((o) => !((o.kind === 'car' || o.kind === 'bin') && o.x > 30 && Math.abs(o.z - b.z) < 8));
           b.state = 'empty';
         }
+        // Dış sınırlar
+        add('bound', 0, 130, 264, 4, 16); add('bound', 0, -130, 264, 4, 16);
+        add('bound', 130, 0, 4, 264, 16); add('bound', -130, 0, 4, 264, 16);
+        lot.kind = 'otopark';
+        lot.scanEnd = SCAN_END_Z;
         return lot;
       }
 
-      function parkPlanAuto() {
+      // ---- CADDE: uzun bir sokak. Sağda kaldırım boyunca paralel park, solda dükkân önü dikey park cepleri,
+      //      yaya geçitlerinde kaldırım yola doğru genişler (oraya park edilmez). Robot bunları bilmez.
+      const STREET_END = 780;
+      function makeStreet(seed) {
+        const rnd = mulberry32(seed * 7919 + 13);
+        const lot = { seed, kind: 'cadde', bays: [], parCars: [], boxes: [], scene: { bayGroups: [], planters: [], crosswalks: [], bayLines: [] } };
+        const add = (kind, x, z, w, d, h) => lot.boxes.push({ kind, x, z, w, d, h, minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+        const Z0 = -130, Z1 = STREET_END;
+        const mid = (Z0 + Z1) / 2, len = Z1 - Z0;
+        add('bound', 0, Z0 - 2, 264, 4, 16);              // caddenin başı
+        add('bound', 0, Z1 + 2, 264, 4, 30);              // caddenin sonu (bina cephesi)
+        add('bound', 130, mid, 4, len + 8, 16);
+        add('bound', -130, mid, 4, len + 8, 16);
+        add('wall', 70, mid, 4, len, 14);                 // dükkân cepheleri (sol)
+        add('curb', -44, mid, 4, len, 10);                // kaldırım (sağ, iç yüz x=−42)
+        // Yaya geçitleri: kaldırım yola doğru genişler (x −42…−20)
+        const cross = [];
+        let cz = 140 + rnd() * 60;
+        while (cz < Z1 - 120) { cross.push([cz, cz + 34]); cz += 230 + rnd() * 120; }
+        cross.forEach(([a, b]) => { add('bulb', -31, (a + b) / 2, 22, b - a, 10); lot.scene.crosswalks.push({ z0: a, z1: b }); });
+        const inCross = (z0, z1) => cross.some(([a, b]) => z1 > a - 4 && z0 < b + 4);
+
+        // SOL: dükkân önü dikey park cepleri ve aralarında ağaçlı saksılar
+        let cur = Z0;
+        let first = true;
+        while (cur < Z1 - 40) {
+          const plen = first ? (-60 - Z0) : 30 + rnd() * 40;
+          first = false;
+          const pe = Math.min(Z1, cur + plen);
+          add('block', 51, (cur + pe) / 2, 38, pe - cur, 14);
+          lot.scene.planters.push({ z0: cur, z1: pe });
+          cur = pe;
+          if (cur > Z1 - 70) break;
+          const n = 3 + Math.floor(rnd() * 4);
+          const g0 = cur;
+          for (let i = 0; i < n && cur + 30 <= Z1 - 30; i++) {
+            const z = cur + 15;
+            const busy = z < 180 ? 0.88 : PROB.car;        // caddenin başı daha dolu: robot ilerlemek zorunda kalır
+            const r = rnd();
+            const state = r < busy ? 'car' : r < busy + (1 - busy) * 0.8 ? 'empty' : 'shallow';
+            lot.bays.push({ z, state });
+            if (state === 'car') add('car', 50, z + (rnd() - 0.5) * 2 * PROB.offset, 23, 16 + rnd() * 4, 10);
+            if (state === 'shallow') add('bin', 62, z, 12, 14, 12);
+            lot.scene.bayLines.push(cur);
+            cur += 30;
+          }
+          lot.scene.bayLines.push(cur);
+          lot.scene.bayGroups.push({ z0: g0, z1: cur });
+        }
+        if (cur < Z1) { add('block', 51, (cur + Z1) / 2, 38, Z1 - cur, 14); lot.scene.planters.push({ z0: cur, z1: Z1 }); }
+
+        // SAĞ: kaldırım boyunca paralel park etmiş araçlar
+        let p = -104 + rnd() * 8;
+        while (p < Z1 - 40) {
+          if (inCross(p, p + 23)) { const c = cross.find(([a, b]) => p + 23 > a - 4 && p < b + 4); p = c[1] + 6 + rnd() * 10; continue; }
+          lot.parCars.push(p + 11.5);
+          add('car', -29, p + 11.5, 18, 23, 10);
+          p += 23;
+          const r = rnd();
+          const small = p < 180 ? 0.85 : PROB.small;
+          p += r < small ? 8 + rnd() * 8 : r < small + PROB.medium ? 36 + rnd() * 10 : 52 + rnd() * 8;
+        }
+        lot.scanEnd = Z1 - 60;
+        return lot;
+      }
+
+      function parkPlanAuto(endZ) {
         return [
           { type: 'turn', h: 0, label: 'Koridora hizalanıyor' },
-          { type: 'scan', speed: 18, label: 'İki yan sensörle park yeri aranıyor' }
+          { type: 'scan', speed: 18, endZ: endZ || SCAN_END_Z, label: 'İki yan sensörle park yeri aranıyor' }
         ];
       }
 
@@ -1790,7 +1863,7 @@
               }
             }
 
-            if (P.z > SCAN_END_Z) { mem.error = 'Uygun park yeri bulunamadı'; return [0, 0, true]; }
+            if (P.z > (st.endZ || SCAN_END_Z)) { mem.error = 'Uygun park yeri bulunamadı'; return [0, 0, true]; }
             return [ramp(st.speed), laneW(0, false, LANE_X, 0), false];
           }
         }
@@ -1833,7 +1906,8 @@
           if (d < limit) hit = { mode: 'guard', limit };
         } else {
           const prev = mem.prevD && mem.prevD.sensor === sensor ? mem.prevD.d : null;
-          if (prev !== null && prev - d - Math.abs(v) * dt > ANI_DUSUS_CM) hit = { mode: 'drop', ref: prev };
+          // 390 cm üstü = yankı yok (menzil dışı): oradan gelen 'düşüş' engel değil, uzaktaki bir şeyin menzile girmesidir
+          if (prev !== null && prev < 390 && prev - d - Math.abs(v) * dt > ANI_DUSUS_CM) hit = { mode: 'drop', ref: prev };
           else if (d < 3) hit = { mode: 'guard', limit: 3 };
         }
         mem.prevD = { sensor, d };
@@ -1871,7 +1945,7 @@
 
       // Ortak dış duvarlar
       [[0, 130, 264, 4], [0, -130, 264, 4], [130, 0, 4, 264], [-130, 0, 4, 264]].forEach(([x, z, w, dd]) =>
-        addBlock(['free', 'park'], worldGroup, x, z, w, dd, 16, 0xcbd5e1));
+        addBlock(['free'], worldGroup, x, z, w, dd, 16, 0xcbd5e1));
 
       // Serbest alan engelleri
       [
@@ -1886,14 +1960,6 @@
 
       // ---------------- OTOPARK SAHNESİ (her seferinde rastgele düzen) ----------------
       const PG = LAYOUTS.park.group;
-      const asphalt = new THREE.Mesh(
-        new THREE.PlaneGeometry(256, 256),
-        new THREE.MeshStandardMaterial({ color: 0x7d8693, roughness: 0.95, metalness: 0 })
-      );
-      asphalt.rotation.x = -Math.PI / 2;
-      asphalt.position.y = 0.02;
-      asphalt.receiveShadow = true;
-      PG.add(asphalt);
 
       const paintMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
       const paintYellow = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.9 });
@@ -1901,7 +1967,7 @@
         const m = new THREE.Mesh(new THREE.PlaneGeometry(w, dd), mat || paintMat);
         m.rotation.x = -Math.PI / 2;
         m.position.set(x, 0.05, z);
-        (parent || PG).add(m);
+        (parent || lotScene).add(m);
         return m;
       }
       function groundLabel(text, x, z, w, dd, alongZ, color) {
@@ -1923,18 +1989,8 @@
         if (alongZ) geo.rotateY(-Math.PI / 2);
         const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
         m.position.set(x, 0.07, z);
-        PG.add(m);
+        lotScene.add(m);
       }
-
-      // Sabit zemin çizgileri: dikey park yerleri (sol) ve kaldırım çizgisi (sağ)
-      for (let z = -60; z <= 90; z += 30) paint(50, z, 36, 1.2);
-      paint(32, 15, 1.2, 151.2);
-      paint(-16, 0, 0.9, 250, paintYellow);
-      paint(-12, -112, 1.2, 24);
-      paint(12, -112, 1.2, 24);
-      groundLabel('DİKEY PARK', 22, -80, 34, 6, true);
-      groundLabel('KALDIRIM', -10, -80, 30, 5, true, '#fde68a');
-      groundLabel('BAŞLANGIÇ', 0, -97, 22, 4.5, false, '#e2e8f0');
 
       // Park etmiş araçlar (stilize)
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.85 });
@@ -1979,12 +2035,192 @@
       }
 
       let lotSeed = (Date.now() % 1000000) | 0;
-      function buildLot(seed) {
+      // ---- Haritaya göre zemin, çizgiler ve çevre (yeniden kurulur)
+      const lotScene = new THREE.Group();
+      PG.add(lotScene);
+      let currentMap = 'otopark';
+      let currentLot = null;
+      const MAT = {
+        road: new THREE.MeshStandardMaterial({ color: 0x5f6772, roughness: 0.95 }),
+        walk: new THREE.MeshStandardMaterial({ color: 0xd4d0c8, roughness: 0.9 }),
+        curbStone: new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.7 }),
+        planter: new THREE.MeshStandardMaterial({ color: 0xbfb8ab, roughness: 0.85 }),
+        grass: new THREE.MeshStandardMaterial({ color: 0x4d8b3a, roughness: 0.9 }),
+        trunk: new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 }),
+        leaf: new THREE.MeshStandardMaterial({ color: 0x3f8f45, roughness: 0.8, flatShading: true }),
+        leaf2: new THREE.MeshStandardMaterial({ color: 0x5aa04a, roughness: 0.8, flatShading: true }),
+        pole: new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.5, metalness: 0.5 }),
+        lamp: new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xffe9a8, emissiveIntensity: 0.9 }),
+        sign: new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.5 })
+      };
+      // Bina cephesi: pencere deseni (beyaz zemin, malzeme rengiyle boyanır)
+      const facadeTex = (() => {
+        const c = document.createElement('canvas');
+        c.width = 128; c.height = 128;
+        const g = c.getContext('2d');
+        g.fillStyle = '#ffffff'; g.fillRect(0, 0, 128, 128);
+        g.fillStyle = '#5b6b7d';
+        for (let y = 14; y < 128; y += 64) for (let x = 14; x < 128; x += 64) g.fillRect(x, y, 36, 40);
+        g.fillStyle = 'rgba(255,255,255,0.35)';
+        for (let y = 14; y < 128; y += 64) for (let x = 14; x < 128; x += 64) g.fillRect(x + 4, y + 4, 10, 32);
+        const t = new THREE.CanvasTexture(c);
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.encoding = THREE.sRGBEncoding;
+        return t;
+      })();
+      const FACADES = [0xf3e3c8, 0xe8d5d0, 0xd9e2ea, 0xe6e2d3, 0xf1d9b5, 0xd7e4d1, 0xe9e1f0];
+
+      function sceneBox(w, h, d, mat, x, y, z, shadow) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        m.position.set(x, y, z);
+        m.castShadow = !!shadow;
+        m.receiveShadow = true;
+        lotScene.add(m);
+        return m;
+      }
+      function tree(x, z, baseY, s) {
+        s = s || 1;
+        const t = new THREE.Mesh(new THREE.CylinderGeometry(0.9 * s, 1.3 * s, 16 * s, 8), MAT.trunk);
+        t.position.set(x, baseY + 8 * s, z);
+        t.castShadow = true;
+        lotScene.add(t);
+        const c1 = new THREE.Mesh(new THREE.IcosahedronGeometry(8 * s, 1), MAT.leaf);
+        c1.position.set(x, baseY + 21 * s, z);
+        c1.castShadow = true;
+        lotScene.add(c1);
+        const c2 = new THREE.Mesh(new THREE.IcosahedronGeometry(5.5 * s, 1), MAT.leaf2);
+        c2.position.set(x + 3 * s, baseY + 26 * s, z - 2 * s);
+        c2.castShadow = true;
+        lotScene.add(c2);
+      }
+      function streetLamp(x, z, baseY, armDir) {
+        const p = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 42, 8), MAT.pole);
+        p.position.set(x, baseY + 21, z);
+        p.castShadow = true;
+        lotScene.add(p);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 0.6), MAT.pole);
+        arm.position.set(x + armDir * 5, baseY + 41.5, z);
+        lotScene.add(arm);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 2.4), MAT.lamp);
+        head.position.set(x + armDir * 10, baseY + 40.8, z);
+        lotScene.add(head);
+      }
+      function building(x0, x1, z0, z1, h, color) {
+        const w = Math.abs(x1 - x0), d = z1 - z0;
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85, map: facadeTex.clone() });
+        mat.map.needsUpdate = true;
+        mat.map.repeat.set(Math.max(1, Math.round(d / 18)), Math.max(1, Math.round(h / 18)));
+        const roof = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.9 });
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [mat, mat, roof, roof, mat, mat]);
+        m.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        lotScene.add(m);
+      }
+      function signBoard(text, x, z, baseY, faceZ) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 26, 8), MAT.pole);
+        pole.position.set(x, baseY + 13, z);
+        lotScene.add(pole);
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 128;
+        const g = c.getContext('2d');
+        g.fillStyle = '#1d4ed8'; g.fillRect(0, 0, 512, 128);
+        g.strokeStyle = '#ffffff'; g.lineWidth = 8; g.strokeRect(8, 8, 496, 112);
+        g.fillStyle = '#ffffff'; g.font = '800 60px Inter, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(text, 256, 68);
+        const tex = new THREE.CanvasTexture(c);
+        tex.encoding = THREE.sRGBEncoding;
+        const b = new THREE.Mesh(new THREE.PlaneGeometry(20, 5), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
+        b.position.set(x, baseY + 26, z);
+        b.rotation.y = faceZ;
+        lotScene.add(b);
+      }
+
+      function buildOtoparkScene() {
+        const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(256, 256), new THREE.MeshStandardMaterial({ color: 0x7d8693, roughness: 0.95, metalness: 0 }));
+        asphalt.rotation.x = -Math.PI / 2;
+        asphalt.position.y = 0.02;
+        asphalt.receiveShadow = true;
+        lotScene.add(asphalt);
+        for (let z = -60; z <= 90; z += 30) paint(50, z, 36, 1.2);
+        paint(32, 15, 1.2, 151.2);
+        paint(-16, 0, 0.9, 250, paintYellow);
+        paint(-12, -112, 1.2, 24);
+        paint(12, -112, 1.2, 24);
+        groundLabel('DİKEY PARK', 22, -80, 34, 6, true);
+        groundLabel('KALDIRIM', -10, -80, 30, 5, true, '#fde68a');
+        groundLabel('BAŞLANGIÇ', 0, -97, 22, 4.5, false, '#e2e8f0');
+      }
+
+      function buildStreetScene(lot) {
+        const Z0 = -132, Z1 = STREET_END + 2, L = Z1 - Z0, zc = (Z0 + Z1) / 2;
+        const rnd = mulberry32(lot.seed + 99);
+        // Yol (park cepleri dahil) ve iki yanda yaya kaldırımı
+        const road = new THREE.Mesh(new THREE.PlaneGeometry(112, L), MAT.road);
+        road.rotation.x = -Math.PI / 2;
+        road.position.set(14, 0.02, zc);
+        road.receiveShadow = true;
+        lotScene.add(road);
+        sceneBox(30, 10, L, MAT.walk, -61, 5, zc);                 // sağ kaldırım (yüksek)
+        sceneBox(24, 14, L, MAT.walk, 84, 7, zc);                  // sol yaya yolu (dükkân önü)
+        // Şerit çizgileri: kesikli orta çizgi, park şeridi sarı çizgisi, dikey cep çizgileri
+        for (let z = Z0 + 10; z < Z1 - 10; z += 26) paint(16, z, 1.1, 13);
+        const cw = lot.scene.crosswalks;
+        let zz = Z0;
+        cw.concat([{ z0: Z1, z1: Z1 }]).forEach((c) => { if (c.z0 - zz > 4) paint(-16, (zz + c.z0) / 2, 0.9, c.z0 - zz, paintYellow); zz = c.z1; });
+        lot.scene.bayGroups.forEach((g) => paint(32, (g.z0 + g.z1) / 2, 1.2, g.z1 - g.z0));
+        lot.scene.bayLines.forEach((z) => paint(50, z, 36, 1.2));
+        // Yaya geçitleri (zebra) ve kaldırım genişlemesinin üstü
+        cw.forEach((c) => {
+          for (let x = -17; x <= 28; x += 6) paint(x, (c.z0 + c.z1) / 2, 3.2, c.z1 - c.z0 - 6);
+          signBoard('YAYA GEÇİDİ', -34, c.z0 - 2, 10, 0);
+        });
+        // Saksılar (dükkânlar arası) üstünde çim ve ağaç
+        lot.scene.planters.forEach((p) => {
+          const len = p.z1 - p.z0;
+          const grass = new THREE.Mesh(new THREE.PlaneGeometry(34, Math.max(1, len - 4)), MAT.grass);
+          grass.rotation.x = -Math.PI / 2;
+          grass.position.set(51, 14.05, (p.z0 + p.z1) / 2);
+          lotScene.add(grass);
+          for (let z = p.z0 + 18; z < p.z1 - 12; z += 40) tree(51, z, 14, 0.9 + rnd() * 0.3);
+        });
+        // Sağ kaldırımda ağaçlar ve sokak lambaları
+        for (let z = Z0 + 40; z < Z1 - 20; z += 62 + rnd() * 20) {
+          if (cw.some((c) => z > c.z0 - 10 && z < c.z1 + 10)) continue;
+          tree(-62, z, 10, 0.85 + rnd() * 0.35);
+        }
+        for (let z = Z0 + 70; z < Z1 - 20; z += 140) streetLamp(-50, z, 10, 1);
+        for (let z = Z0 + 140; z < Z1 - 20; z += 140) streetLamp(78, z, 14, -1);
+        // Binalar: solda dükkân sırası, sağda apartmanlar
+        for (let z = Z0; z < Z1; ) {
+          const d = 60 + rnd() * 70;
+          const z2 = Math.min(Z1, z + d);
+          building(96, 128, z, z2 - 2, 34 + rnd() * 50, FACADES[Math.floor(rnd() * FACADES.length)]);
+          z = z2;
+        }
+        for (let z = Z0; z < Z1; ) {
+          const d = 50 + rnd() * 80;
+          const z2 = Math.min(Z1, z + d);
+          building(-76, -128, z, z2 - 2, 40 + rnd() * 70, FACADES[Math.floor(rnd() * FACADES.length)]);
+          z = z2;
+        }
+        building(-128, 128, Z1 + 4, Z1 + 30, 70, 0xe5e0d5);         // caddenin sonundaki bina
+        signBoard('PARK CADDESİ', -40, -108, 10, 0);
+        signBoard('P  OTOPARK', 74, -40, 14, 0);
+        paint(-12, -112, 1.2, 24);
+        paint(12, -112, 1.2, 24);
+        groundLabel('BAŞLANGIÇ', 0, -97, 22, 4.5, false, '#e2e8f0');
+      }
+
+      function buildLot(seed, kind) {
+        kind = kind || currentMap;
         while (lotDyn.children.length) lotDyn.remove(lotDyn.children[0]);
+        while (lotScene.children.length) lotScene.remove(lotScene.children[0]);
         LAYOUTS.park.meshes = parkBaseMeshes.slice();
         LAYOUTS.park.boxes = parkBaseBoxes.slice();
-        const lot = makeLot(seed);
+        const lot = makeLot(seed, kind);
         const rnd = mulberry32(seed + 7);
+        const street = kind === 'cadde';
         lot.boxes.forEach((o) => {
           if (o.kind === 'car') {
             const color = CAR_COLORS[Math.floor(rnd() * CAR_COLORS.length)];
@@ -1992,11 +2228,18 @@
             parkedCar(o, color, facing);
           } else if (o.kind === 'bin') {
             addBlock(['park'], lotDyn, o.x, o.z, o.w, o.d, o.h, 0x4d7c0f);
+          } else if (o.kind === 'bound' && street) {
+            // Caddede sınırlar görünmez (binalar ve kaldırım çizilir) ama sensörler görür
+            const m = addBlock(['park'], lotDyn, o.x, o.z, o.w, o.d, o.h, 0xcbd5e1);
+            m.visible = false;
           } else {
-            const col = o.kind === 'curb' ? 0xe5e7eb : 0xd6dbe2;
+            let col = o.kind === 'curb' ? 0xe5e7eb : o.kind === 'bulb' ? 0xd4d0c8 : o.kind === 'block' && street ? 0xbfb8ab : o.kind === 'wall' && street ? 0x8b8f98 : 0xd6dbe2;
             addBlock(['park'], lotDyn, o.x, o.z, o.w, o.d, o.h, col);
           }
         });
+        if (street) { buildStreetScene(lot); scene.fog = new THREE.Fog(0xeef2f6, 260, 820); }
+        else { buildOtoparkScene(); scene.fog = null; }
+        currentLot = lot;
         return lot;
       }
       buildLot(lotSeed);
@@ -2005,6 +2248,7 @@
         LAYOUTS.free.group.visible = k === 'free';
         LAYOUTS.park.group.visible = k === 'park';
         floorGrid.visible = k === 'free';
+        scene.fog = (k === 'park' && currentMap === 'cadde') ? new THREE.Fog(0xeef2f6, 260, 820) : null;
         obstacleMeshes.length = 0;
         obstacleBoxes.length = 0;
         LAYOUTS[k].meshes.forEach((m) => obstacleMeshes.push(m));
@@ -2603,7 +2847,7 @@
         removeTestBox();
         applyLayout(k);
         layoutBtns.forEach((b) => {
-          const on = b.dataset.layout === k;
+          const on = b.dataset.layout === k && (!b.dataset.map || b.dataset.map === currentMap);
           b.classList.toggle('bg-white', on);
           b.classList.toggle('text-slate-900', on);
           b.classList.toggle('shadow-sm', on);
@@ -2620,7 +2864,14 @@
         renderParkLog(null);
         showParkStatus(k === 'park' ? 'Robot otoparkın düzenini bilmiyor; ölçer ve kendisi karar verir. Kurallar: kaldırımda boşluk ≥ ' + RULES.parMinLen + ' cm → paralel · park yeri ≥ ' + RULES.duzMinWidth + ' cm → düz · ' + RULES.perpMinWidth + '–' + RULES.duzMinWidth + ' cm → geri.' : '');
       }
-      layoutBtns.forEach((b) => b.addEventListener('click', () => setLayout(b.dataset.layout)));
+      layoutBtns.forEach((b) => b.addEventListener('click', () => {
+        if (b.dataset.map && b.dataset.map !== currentMap) {
+          currentMap = b.dataset.map;
+          buildLot(lotSeed, currentMap);
+        }
+        setLayout(b.dataset.layout);
+        if (b.dataset.map === 'cadde') showParkStatus('Cadde: robot sağdaki kaldırımda paralel, soldaki dükkân önü ceplerde dikey park yeri arar. Yaya geçitlerine park etmez. "Otomatik Park Et"e basın.');
+      }));
 
       function startPark() {
         ensureAudio();
@@ -2628,7 +2879,7 @@
         if (autoMode) setAuto(false);
         Object.keys(keys).forEach((k) => { keys[k] = false; });
         placeRobot(PARK_START.x, PARK_START.z, PARK_START.h);
-        park = { steps: parkPlanAuto(), i: 0, mem: {}, dec: null };
+        park = { steps: parkPlanAuto(currentLot ? currentLot.scanEnd : undefined), i: 0, mem: {}, dec: null };
         lastLogLen = -1;
         renderParkLog([]);
         btnAutoPark.classList.add('ring-2', 'ring-amber-400');
@@ -2645,7 +2896,7 @@
         lotSeed = (lotSeed * 16807 + 12345) % 2147483647;
         buildLot(lotSeed);
         setLayout('park');
-        showParkStatus('Yeni otopark hazır: araçlar ve boşluklar rastgele dizildi. Robot bunları bilmiyor.');
+        showParkStatus((currentMap === 'cadde' ? 'Yeni cadde hazır' : 'Yeni otopark hazır') + ': araçlar ve boşluklar rastgele dizildi. Robot bunları bilmiyor.');
       });
       document.getElementById('btn-park-reset').addEventListener('click', () => setLayout('park'));
 
