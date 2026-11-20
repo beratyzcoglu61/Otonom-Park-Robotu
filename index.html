@@ -75,6 +75,10 @@
     button:focus-visible { outline:2px solid #f59e0b; outline-offset:2px; }
     #parts-panel::-webkit-scrollbar { width:6px } #parts-panel::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:6px }
     @media (prefers-reduced-motion: reduce) { .spin-icon { animation:none } }
+    body.driving .model-only { display: none !important; }
+    #drive-hud.collapsed .hud-detail { display: none !important; }
+    @media (hover: hover) and (pointer: fine) { #dpad { display: none !important; } }
+    .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   </style>
 </head>
 <body>
@@ -105,6 +109,23 @@
     </div>
   </header>
 
+  <!-- Sensör çubuğu (sürüşte sağ üst köşe): basınca açılır, tekrar basınca kapanır -->
+  <button id="sensor-widget" type="button" aria-expanded="false" aria-label="Sensör mesafeleri"
+    class="hidden fixed z-30 right-3 top-24 sm:top-4 glass-panel rounded-xl px-3 py-1.5 text-left max-w-[calc(100vw-1.5rem)]">
+    <span class="flex items-center gap-2 text-[11px] font-semibold text-slate-700 whitespace-nowrap">
+      <span id="sw-dot" class="w-2 h-2 rounded-full bg-emerald-500 flex-none"></span>
+      <span id="hud-speed" class="tabular-nums">0 cm/s</span>
+      <span class="text-slate-300">|</span>
+      <span id="sw-near" class="tabular-nums">—</span>
+      <span id="sw-arrow" class="text-slate-400">▾</span>
+    </span>
+    <span id="sw-detail" class="hidden mt-2 pt-2 border-t border-slate-200/70 flex-col gap-1.5">
+      <span class="block text-[10px] uppercase tracking-wider font-semibold text-slate-400">Sensörler (cm)</span>
+      <span id="hud-sonars" class="grid grid-cols-3 gap-x-3 gap-y-0.5 text-[11px] tabular-nums"></span>
+      <span class="flex items-center gap-1.5 text-[11px] mt-1"><span class="text-slate-400">Mod</span> <b id="hud-mode" class="text-slate-800">Manuel</b></span>
+    </span>
+  </button>
+
   <!-- Malzeme Listesi Paneli -->
   <aside id="parts-panel" class="glass-panel fixed z-20 left-4 w-64 rounded-2xl p-2.5 overflow-y-auto" style="top:112px">
     <div class="flex items-center justify-between mb-1.5 px-1.5 pt-0.5">
@@ -134,40 +155,50 @@
   <!-- Alt Kontrol Çubuğu -->
   <footer id="footer" class="fixed bottom-4 left-3 right-3 z-20 flex flex-col items-center gap-2 pointer-events-none">
     <!-- Sürüş Göstergesi -->
-    <div id="drive-hud" class="glass-panel rounded-2xl p-2.5 pointer-events-auto hidden">
-      <div class="flex flex-wrap items-center justify-center gap-3">
-        <div id="hud-alarm" class="hidden w-full text-center text-xs font-bold text-white rounded-lg px-3 py-1.5"></div>
-        <div class="w-full flex flex-wrap items-center justify-center gap-2">
-          <div class="flex bg-slate-100/90 p-1 rounded-xl gap-1" role="group" aria-label="Sürüş alanı">
-            <button type="button" data-layout="park" data-map="otopark" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-sm">Otopark</button>
-            <button type="button" data-layout="park" data-map="cadde" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600">Cadde</button>
-            <button type="button" data-layout="free" class="layout-btn px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600">Serbest Sürüş</button>
-          </div>
-          <div id="park-controls" class="hidden flex flex-wrap items-center gap-1.5">
-            <button type="button" id="btn-autopark" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-400 text-slate-900 shadow-sm">Otomatik Park Et</button>
-            <button type="button" id="btn-obstacle" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-orange-500 text-white shadow-sm">Engel Koy</button>
-            <button type="button" id="btn-newlot" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Yeni Düzen</button>
-            <button type="button" id="btn-park-reset" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Başa Dön</button>
-          </div>
+    <div id="drive-hud" class="glass-panel rounded-2xl px-2.5 py-2 pointer-events-auto hidden collapsed w-full max-w-4xl">
+      <!-- Satır 1: harita ve park düğmeleri -->
+      <div class="flex flex-wrap items-center justify-center gap-1.5">
+        <div class="flex bg-slate-100/90 p-0.5 rounded-lg gap-0.5" role="group" aria-label="Sürüş alanı">
+          <button type="button" data-layout="park" data-map="otopark" class="layout-btn px-2 py-1 rounded-md text-[11px] font-semibold bg-white text-slate-900 shadow-sm">Otopark</button>
+          <button type="button" data-layout="park" data-map="cadde" class="layout-btn px-2 py-1 rounded-md text-[11px] font-medium text-slate-600">Cadde</button>
+          <button type="button" data-layout="park" data-map="sehir" class="layout-btn px-2 py-1 rounded-md text-[11px] font-medium text-slate-600">Şehir</button>
+          <button type="button" data-layout="free" class="layout-btn px-2 py-1 rounded-md text-[11px] font-medium text-slate-600">Serbest</button>
         </div>
-        <div id="park-status" class="hidden w-full text-center text-xs font-semibold text-slate-700 bg-white/80 rounded-lg px-3 py-1.5"></div>
-        <div id="park-log" class="hidden w-full max-w-md text-[11px] leading-snug bg-white/70 rounded-lg px-3 py-1.5 flex flex-col gap-0.5"></div>
-        <div class="flex items-center gap-4 px-2">
-          <div><div class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Hız</div><div id="hud-speed" class="text-base font-bold text-slate-800 tabular-nums whitespace-nowrap">0 cm/s</div></div>
-          <div><div class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Sensörler (cm)</div><div id="hud-sonars" class="grid grid-cols-3 gap-x-3 text-[11px] tabular-nums mt-0.5"></div></div>
-          <div><div class="text-[10px] uppercase tracking-wider font-semibold text-slate-400">Mod</div><div id="hud-mode" class="text-sm font-semibold text-slate-800 whitespace-nowrap">Manuel</div></div>
+        <div id="park-controls" class="hidden flex flex-wrap items-center gap-1">
+          <span id="city-controls" class="hidden flex items-center gap-1">
+            <select id="city-target" aria-label="Park hedefi" class="px-1.5 py-1 rounded-lg text-[11px] font-semibold bg-white text-slate-700 border border-slate-200/80">
+              <option value="curb">Yol kenarı (ilk boş yer)</option>
+              <option value="0">Hastane otoparkı</option>
+              <option value="1">Belediye otoparkı 1</option>
+              <option value="2">Belediye otoparkı 2</option>
+            </select>
+            <button type="button" id="btn-simspeed" class="btn-pill px-2 py-1 rounded-lg text-[11px] font-semibold bg-white text-slate-700 border border-slate-200/80" title="Şehir simülasyonunu hızlandır">Hız 1×</button>
+          </span>
+          <button type="button" id="btn-autopark" class="btn-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-400 text-slate-900 shadow-sm">Otomatik Park Et</button>
+          <button type="button" id="btn-obstacle" class="btn-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-orange-500 text-white shadow-sm">Engel Koy</button>
+          <button type="button" id="btn-newlot" class="btn-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white text-slate-700 border border-slate-200/80">Yeni Düzen</button>
+          <button type="button" id="btn-park-reset" class="btn-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white text-slate-700 border border-slate-200/80">Başa Dön</button>
         </div>
-        <div id="dpad" class="grid grid-cols-3 gap-1">
-          <span></span><button type="button" class="dpad-btn" data-dir="f" aria-label="İleri">▲</button><span></span>
-          <button type="button" class="dpad-btn" data-dir="l" aria-label="Sola dön">◀</button>
-          <button type="button" class="dpad-btn" data-dir="b" aria-label="Geri">▼</button>
-          <button type="button" class="dpad-btn" data-dir="r" aria-label="Sağa dön">▶</button>
-        </div>
-        <div class="flex flex-col gap-1.5 items-stretch">
-          <button id="btn-auto" type="button" class="btn-pill px-3 py-2 rounded-xl text-xs font-semibold bg-white text-slate-700 border border-slate-200/80">Otonom Sürüş</button>
-          <button id="btn-sound" type="button" class="btn-pill px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-white text-slate-600 border border-slate-200/80">Buzzer sesi: Açık</button>
-          <div class="text-[11px] text-slate-500 text-center hidden sm:block">Klavye: W A S D / oklar</div>
-        </div>
+        <button id="btn-auto" type="button" class="btn-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white text-slate-700 border border-slate-200/80">Otonom Sürüş</button>
+        <button id="btn-sound" type="button" class="btn-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white text-slate-600 border border-slate-200/80">Ses: Açık</button>
+        <button id="hud-more" type="button" aria-expanded="false" class="btn-pill px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-900 text-white">Ölçümler <span id="log-count" class="opacity-70"></span> ▾</button>
+      </div>
+      <!-- Satır 2: uyarı etiketi ve tek satırlık durum -->
+      <div class="flex items-center gap-2 mt-1.5 min-h-[1.25rem]">
+        <div id="hud-alarm" class="hidden flex-none text-[11px] font-bold text-white rounded-full px-2.5 py-0.5 whitespace-nowrap"></div>
+        <div id="park-status" class="hidden flex-1 min-w-0 text-[11px] sm:text-xs font-semibold text-slate-700 text-center line-clamp-2"></div>
+      </div>
+      <!-- Ayrıntılar (açılır) -->
+      <div class="hud-detail flex flex-wrap items-center justify-center gap-3 mt-2 pt-2 border-t border-slate-200/70">
+        <div id="park-log" class="hidden max-w-sm text-[11px] leading-snug bg-white/70 rounded-lg px-2.5 py-1.5 flex flex-col gap-0.5"></div>
+        <div class="text-[11px] text-slate-500 hidden sm:block kb-hint">Klavye: W A S D / oklar</div>
+      </div>
+      <!-- Dokunmatik yön tuşları (yalnızca dokunmatik ekranda) -->
+      <div id="dpad" class="grid grid-cols-3 gap-1 w-max mx-auto mt-2">
+        <span></span><button type="button" class="dpad-btn" data-dir="f" aria-label="İleri">▲</button><span></span>
+        <button type="button" class="dpad-btn" data-dir="l" aria-label="Sola dön">◀</button>
+        <button type="button" class="dpad-btn" data-dir="b" aria-label="Geri">▼</button>
+        <button type="button" class="dpad-btn" data-dir="r" aria-label="Sağa dön">▶</button>
       </div>
     </div>
     <div class="glass-panel rounded-2xl p-2 pointer-events-auto max-w-full overflow-x-auto">
@@ -1581,6 +1612,7 @@
       const PAR_ZOFF = 4;
       const PAR_IN = 1;      // park bitince gövde şerit çizgisinin içinde kalır
       const STOP_CM = 6;
+      const PIVOT_R = Math.hypot(11.6, 9);   // yerinde dönerken gövdenin süpürdüğü yarıçap (≈ 14,7 cm)
       const SIDE_Z = 6.4;            // yan ön sensörlerin araç ortasına göre boyuna konumu (uca yakın)
       const SCAN_END_Z = 92;
       // Karar kuralları (gerçek araçta da aynı eşikler kullanılabilir)
@@ -1590,7 +1622,7 @@
         perpMinWidth: 26, // dikey yer en az: araç genişliği 18 + 2×4 cm
         perpMinDepth: 55, // sensörden arka engele en az mesafe
         duzMinWidth: 41,  // bu genişlik ve üstü → düz park (geniş yer), altı → geri park (dar yer)
-        parMinLen: 50     // paralel boşluk en az (araç boyu 23 cm)
+        parMinLen: 35     // paralel boşluk en az 1,5 × araç boyu (23 cm) — raporundaki kural
       };
 
       // ---- Rastgele otopark üretici (sahne ve simülasyon aynı veriyi kullanır)
@@ -1613,7 +1645,7 @@
         add('wall', 70, 15, 4, 150, 14);           // dikey yerlerin arka duvarı (iç yüz x=68)
         add('block', 51, -94, 38, 68, 14);         // park sırası başlangıcı
         add('block', 51, 109, 38, 38, 14);         // park sırası sonu
-        add('curb', -44, 0, 4, 256, 10);           // kaldırım (iç yüz x=−42); park şeridi çizgisi x=−16
+        add('curb', -46, 0, 4, 256, 10);           // kaldırım (iç yüz x=−44); park şeridi çizgisi x=−16
         // Dikey park yerleri
         BAY_ZS.forEach((z) => {
           const r = rnd();
@@ -1662,12 +1694,12 @@
         add('bound', 130, mid, 4, len + 8, 16);
         add('bound', -130, mid, 4, len + 8, 16);
         add('wall', 70, mid, 4, len, 14);                 // dükkân cepheleri (sol)
-        add('curb', -44, mid, 4, len, 10);                // kaldırım (sağ, iç yüz x=−42)
-        // Yaya geçitleri: kaldırım yola doğru genişler (x −42…−20)
+        add('curb', -46, mid, 4, len, 10);                // kaldırım (sağ, iç yüz x=−44)
+        // Yaya geçitleri: kaldırım yola doğru genişler (x −44…−20)
         const cross = [];
         let cz = 140 + rnd() * 60;
         while (cz < Z1 - 120) { cross.push([cz, cz + 34]); cz += 230 + rnd() * 120; }
-        cross.forEach(([a, b]) => { add('bulb', -31, (a + b) / 2, 22, b - a, 10); lot.scene.crosswalks.push({ z0: a, z1: b }); });
+        cross.forEach(([a, b]) => { add('bulb', -32, (a + b) / 2, 24, b - a, 10); lot.scene.crosswalks.push({ z0: a, z1: b }); });
         const inCross = (z0, z1) => cross.some(([a, b]) => z1 > a - 4 && z0 < b + 4);
 
         // SOL: dükkân önü dikey park cepleri ve aralarında ağaçlı saksılar
@@ -1714,11 +1746,25 @@
         return lot;
       }
 
-      function parkPlanAuto(endZ) {
-        return [
+      // P verilirse robot bulunduğu yerden başlar: park yerindeyse önce çıkar, koridora hizalanır, oradan arar
+      function parkPlanAuto(endZ, P) {
+        const pre = [];
+        if (P) {
+          const sn = Math.sin(P.h), cs = Math.cos(P.h);
+          if (P.x > 14) {
+            // Soldaki dikey park yerinde: düz çıkıp koridora gel
+            if (Math.abs(sn) < 0.5) pre.push({ type: 'turn', h: -Math.PI / 2, label: 'Koridora doğru dönülüyor' });
+            pre.push({ type: 'exitX', x: 1.5, inc: false, label: 'Park yerinden çıkılıyor' });
+          } else if (P.x < -14) {
+            // Paralel park yerinde: yerinde 90° yola doğru dön, düz çık
+            if (Math.abs(sn) < 0.7) pre.push({ type: 'turn', h: Math.PI / 2, label: 'Yerinde 90° yola doğru dönülüyor' });
+            pre.push({ type: 'exitX', x: 0, inc: true, label: 'Park yerinden çıkılıyor' });
+          }
+        }
+        return pre.concat([
           { type: 'turn', h: 0, label: 'Koridora hizalanıyor' },
           { type: 'scan', speed: 18, endZ: endZ || SCAN_END_Z, label: 'İki yan sensörle park yeri aranıyor' }
-        ];
+        ]);
       }
 
       // Karar verildikten sonra uygulanacak manevra
@@ -1738,23 +1784,16 @@
             { type: 'line', h: -Math.PI / 2, px: 0, pz: dec.c, rev: true, speed: 14, slow: (P, son) => Math.max(4, (son('Arka') - STOP_CM) * 1.2), until: (P, son) => son('Arka') <= STOP_CM, label: 'Arka sensörle duvara yaklaşılıyor' }
           ];
         }
+        // Paralel park (raporundaki yöntem): boşluğun ortasında yerinde 90° kaldırıma dön, boşluğa gir,
+        // yerinde 90° dönüp kaldırıma paralel ol, ön ve arka sensörle ortalan
         return [
-          { type: 'lineTo', z: dec.zStart, speed: 14, label: 'Öndeki aracın hizasına gelindi' },
-          { type: 'wait', dur: 0.5, label: 'Geri vitese geçiliyor' },
-          { type: 'arc', h: PAR_THETA, R: dec.R, rev: true, speed: 12, guard: 14, label: 'Arka kaldırıma doğru kırılıyor' },
-          { type: 'arc', h: 0, R: dec.R, rev: true, speed: 12, label: 'Direksiyon karşıya, araç düzleşiyor',
-            // Arka sensör burada arkadaki araca zaten yaklaşır: taramada ölçülen araca/kaldırıma göre beklenen
-            // mesafeden belirgin kısa bir ölçüm, yeni bir engel demektir
-            expect: (P) => {
-              const ox = P.x - 11.4 * Math.sin(P.h), oz = P.z - 11.4 * Math.cos(P.h);
-              let e = 400;
-              if (Math.cos(P.h) > 0.05) e = Math.min(e, (oz - dec.g0) / Math.cos(P.h));
-              if (Math.sin(P.h) > 0.05) e = Math.min(e, (ox - dec.curbX) / Math.sin(P.h));
-              return e;
-            } },
+          { type: 'lineTo', z: dec.c, speed: 14, label: 'Boşluğun ortasına gelindi' },
+          { type: 'turn', h: -Math.PI / 2, label: 'Yerinde 90° kaldırıma doğru dönülüyor' },
+          { type: 'exitX', x: dec.targetX, inc: false, label: 'Boşluğa giriliyor' },
+          { type: 'turn', h: 0, label: 'Yerinde 90° dönüp kaldırıma paralel olunuyor' },
           { type: 'center', h: 0, label: 'Ön ve arka sensörle ortalanıyor' },
           { type: 'turn', h: 0, label: 'Son hizalama' }
-        ];
+        ].filter((st) => !(dec.early && st.type === 'center'));
       }
 
       // Bir adımı çalıştırır: [v (cm/s), w (rad/s), bitti mi]
@@ -1801,6 +1840,16 @@
           }
           case 'wait':
             return [0, 0, st.t >= st.dur];
+          case 'exitX': {
+            // Başlığı koruyarak (±90°) x yönünde düz git: ileri ya da geri, hangisi hedefe götürüyorsa
+            const rem = st.inc ? st.x - P.x : P.x - st.x;
+            if (rem <= 0.4) return [0, 0, true];
+            const need = st.inc ? 1 : -1;
+            const vs = Math.sign(Math.sin(P.h)) * need || 1;
+            const ht = Math.sin(P.h) >= 0 ? Math.PI / 2 : -Math.PI / 2;
+            const sp = Math.min(ramp(12), rem * 2 + 2);
+            return [vs * sp, clampN(3 * wrapA(ht - P.h), 0.8), false];
+          }
           case 'scan': {
             if (!mem.L) { mem.L = { ph: 'seek' }; mem.R = { ph: 'seek' }; mem.log = []; }
             const sL = son('Sol ön');
@@ -1809,8 +1858,9 @@
             const zR = P.z + 4.0 * Math.sin(P.h) + SIDE_Z * Math.cos(P.h);
             const log = (side, text, ok) => mem.log.push({ side, text, ok });
 
-            // SOL: dikey park yerleri
+            // SOL: dikey park yerleri (şehirde sol tarafta karşı şerit var: yalnız sağ taranır)
             const A = mem.L;
+            if (st.sides !== 'right') {
             const openL = sL > RULES.leftOpen;
             if (A.ph === 'seek' && !openL) A.ph = 'closed';
             else if (A.ph === 'closed' && openL) { A.ph = 'open'; A.g0 = zL; A.min = sL; A.best = null; A.d0 = null; }
@@ -1840,31 +1890,51 @@
                 }
               }
             }
+            }
 
             // SAĞ: kaldırım boyunca paralel boşluk
             const B = mem.R;
             const openR = sR > RULES.rightOpen;
             if (B.ph === 'seek' && !openR) B.ph = 'closed';
-            else if (B.ph === 'closed' && openR) { B.ph = 'open'; B.g0 = zR; }
-            if (openR) B.curbX = P.x - 6.1 - sR;   // boşlukta sağ sensör kaldırımı görür
+            else if (B.ph === 'closed' && openR) { B.ph = 'open'; B.g0 = zR; B.maxO = sR; }
+            if (!openR) B.lastCarX = P.x - 6.1 - sR;
+            if (openR) { B.curbX = P.x - 6.1 - sR; B.maxO = Math.max(B.maxO || 0, sR); }   // boşlukta sağ sensör kaldırımı görür
+            // Şehir: boşluk yeterince uzadıysa sonunu beklemeden karar ver (ilk uygun yere park)
+            if (st.early && B.ph === 'open' && openR && zR - B.g0 >= st.early && B.maxO <= 60 && B.lastCarX !== undefined) {
+              const curbX = Math.max(B.curbX, B.lastCarX - 30);
+              const targetX = curbX + PIVOT_R + 1.8;
+              if (targetX <= Math.max(B.lastCarX, -20) - 9 + 3) {
+                log('Sağ', 'Kaldırımda ' + Math.round(zR - B.g0) + ' cm boşluk (≥ ' + st.early + ' cm) → PARALEL PARK', true);
+                mem.decision = { type: 'paralel', len: zR - B.g0, c: B.g0 + st.early / 2 + 1, targetX, early: true };
+                return [0, 0, true];
+              }
+            }
+            if (openR) { /* boşluk sürüyor */ }
             else if (B.ph === 'open' && !openR) {
               B.ph = 'closed';
               const len = zR - B.g0;
               if (len < 20) { /* araçlar arası küçük aralık: yok say */ }
+              else if (B.maxO > 60) log('Sağ', 'Açıklık ' + Math.round(len) + ' cm ama kaldırım yok (giriş ya da sokak ağzı) → geç', false);
               else if (len < RULES.parMinLen) log('Sağ', 'Boşluk ' + Math.round(len) + ' cm → paralel için kısa', false);
               else {
+                // Yerinde dönebilmek için kaldırımdan en az PIVOT_R + pay kadar içeride dur;
+                // park etmiş araçların hizasından 3 cm'den fazla dışarı taşacaksa şerit dar demektir
                 const carSideX = P.x - 6.1 - sR;
-                const targetX = carSideX - 9 + PAR_IN;
-                const shift = P.x - targetX;
-                const R = shift / (2 * (1 - Math.cos(PAR_THETA)));
-                log('Sağ', 'Boşluk ' + Math.round(len) + ' cm (≥ ' + RULES.parMinLen + ' cm) → PARALEL PARK', true);
-                mem.decision = { type: 'paralel', len, R, zStart: zR + PAR_ZOFF, g0: B.g0, curbX: B.curbX };
-                return [0, 0, true];
+                const curbX = B.curbX !== undefined ? B.curbX : carSideX - 22;
+                const targetX = curbX + PIVOT_R + 1.8;
+                if (targetX > carSideX - 9 + 3) log('Sağ', 'Boşluk ' + Math.round(len) + ' cm ama şerit dar → geç', false);
+                else {
+                  log('Sağ', 'Boşluk ' + Math.round(len) + ' cm (≥ ' + RULES.parMinLen + ' cm) → PARALEL PARK', true);
+                  mem.decision = { type: 'paralel', len, c: (B.g0 + zR) / 2, targetX };
+                  return [0, 0, true];
+                }
               }
             }
 
             if (P.z > (st.endZ || SCAN_END_Z)) { mem.error = 'Uygun park yeri bulunamadı'; return [0, 0, true]; }
-            return [ramp(st.speed), laneW(0, false, LANE_X, 0), false];
+            let spd = ramp(st.speed);
+            if (st.capF) spd = Math.min(spd, st.capF(P, son));
+            return [spd < 0.5 ? 0 : spd, laneW(0, false, LANE_X, 0), false];
           }
         }
         return [0, 0, true];
@@ -1884,6 +1954,9 @@
           const clear = pz.mode === 'guard' ? d > pz.limit + 4 : d >= pz.ref - 2;
           pz.clearT = clear ? pz.clearT + dt : 0;
           pz.t += dt;
+          // Ani düşüşle durduysa ve 8 sn boyunca hiçbir şey değişmediyse bu hareketli bir engel değil,
+          // sabit bir cisim: önünde yeterli yer varsa (≥ 12 cm) yavaşça devam et, adımın kendi durma kuralı çalışır
+          if (pz.mode === 'drop' && pz.t > 8 && d >= ENGEL_CM - 4) pz.clearT = ACIK_BEKLE_SN;
           if (pz.clearT >= ACIK_BEKLE_SN) {
             mem.pause = null;
             mem.resumed = (mem.resumed || 0) + 1;
@@ -1905,19 +1978,1087 @@
           const limit = st.guard !== undefined ? st.guard : ENGEL_CM;
           if (d < limit) hit = { mode: 'guard', limit };
         } else {
-          const prev = mem.prevD && mem.prevD.sensor === sensor ? mem.prevD.d : null;
-          // 390 cm üstü = yankı yok (menzil dışı): oradan gelen 'düşüş' engel değil, uzaktaki bir şeyin menzile girmesidir
-          if (prev !== null && prev < 390 && prev - d - Math.abs(v) * dt > ANI_DUSUS_CM) hit = { mode: 'drop', ref: prev };
+          // Araç dönerken sensör ışını yana kayar ve mesafe sıçrar: o anlarda ani düşüş aranmaz
+          const steady = mem.prevD && Math.abs(wrapA(P.h - mem.prevD.h)) < 0.25 * dt;
+          const prev = mem.prevD && mem.prevD.sensor === sensor && steady ? mem.prevD.d : null;
+          // Yalnızca yakına (40 cm içine) aniden giren cisimler engel sayılır; uzaktaki ölçüm sıçramaları değil
+          if (prev !== null && d < 40 && prev - d - Math.abs(v) * dt > ANI_DUSUS_CM) hit = { mode: 'drop', ref: Math.min(prev, 60) };
           else if (d < 3) hit = { mode: 'guard', limit: 3 };
         }
-        mem.prevD = { sensor, d };
+        mem.prevD = { sensor, d, h: P.h };
         if (hit) {
-          mem.pause = Object.assign({ sensor, d, clearT: 0, t: 0 }, hit);
+          mem.pause = Object.assign({ sensor, d, clearT: 0, t: 0, step: st.label }, hit);
           mem.pauses = (mem.pauses || 0) + 1;
           mem.prevD = null;
           return [0, 0, false];
         }
         return out;
+      }
+
+
+      // -----------------------------------------------------------------------
+      // K) ŞEHİR: caddeler, bulvar, ara sokaklar, ışıklı kavşaklar, yaya geçitleri,
+      //    yol kenarı park şeritleri, hastane ve belediye otoparkları, trafik ve yayalar.
+      //    Birim cm. Her "Yeni Düzen"de park doluluğu, otoparkların yeri ve sokaklar değişir.
+      // -----------------------------------------------------------------------
+      const CITY_VX = [-900, -300, 300, 900];
+      const CITY_HZ = [-600, 0, 600];
+      const SIDEWALK = 34;
+      const ROAD_KIND = { cadde: { off: [16], hw: 60 }, bulvar: { off: [54, 22], hw: 98 }, sokak: { off: [0], hw: 44 } };
+      const V_NAMES = ['Gazi Caddesi', 'İstiklal Caddesi', 'Cumhuriyet Caddesi', 'Fatih Caddesi'];
+      const H_NAMES = ['Lale Caddesi', 'Atatürk Bulvarı', 'Zafer Caddesi'];
+      const SOKAK_NAMES = ['Gül Sokak', 'Papatya Sokak'];
+      // Işık döngüsü: önce kuzey-güney, sonra doğu-batı, sonra yalnız yayalar (tüm araçlar kırmızı)
+      // Her faz: yeşil yanan hareketler (gelinen kol; 'WL' = batıdan gelen sola dönebilir), süre
+      function nodePhases(n) {
+        const ph = [];
+        const add = (set, g) => { ph.push([set, 'g', g], [set, 'y', 3], [[], 'r', 2]); };
+        const nArms = Object.values(n.arms).filter(Boolean).length;
+        if (nArms === 4) { add(['N', 'S'], 18); add(['E', 'W'], 18); }
+        else {
+          const stem = ['N', 'S', 'E', 'W'].find((a) => n.arms[a] && !n.arms[{ N: 'S', S: 'N', E: 'W', W: 'E' }[a]]);
+          const thru = ['N', 'S', 'E', 'W'].filter((a) => n.arms[a] && a !== stem);
+          // geçiş yolunda sola dönerek kola girebilen yön: kolun ters tarafındaki yönden gelen değil, saat yönü kuralı
+          const leftArm = { N: 'E', S: 'W', E: 'S', W: 'N' }[stem];
+          add(thru, 16);
+          add([leftArm, leftArm + 'L'], 16);
+          add([stem, stem + 'L'], 16);
+        }
+        ph.push([['P'], 'g', 10], [[], 'r', 2]);
+        return ph;
+      }
+      const armOfH = (H) => { const a = Math.round(wrapA(H) / (Math.PI / 2)); return a === 0 ? 'S' : a === 1 ? 'W' : a === -1 ? 'E' : 'N'; };
+      const CAR_L = 23, CAR_W = 18;
+      const ROBOT_SENS = [['Ön', 0, 8.4, 0], ['Arka', 0, -9.3, Math.PI], ['Sol ön', 4.0, 6.4, Math.PI / 2], ['Sol arka', 4.0, -6.6, Math.PI / 2], ['Sağ ön', -4.0, 6.4, -Math.PI / 2], ['Sağ arka', -4.0, -6.6, -Math.PI / 2]];
+      const ROBOT_FOOT = [];
+      [-9, -4.5, 0, 4.5, 9].forEach((x) => { ROBOT_FOOT.push([x, 11.6], [x, -11.3]); });
+      [-5.8, 0, 5.8].forEach((z) => { ROBOT_FOOT.push([9, z], [-9, z]); });
+
+      // Yerel çerçeve (x = sol, z = ileri) ↔ dünya
+      function frameToW(F, x, z) { const c = Math.cos(F.H), s = Math.sin(F.H); return [F.O[0] + x * c + z * s, F.O[1] - x * s + z * c]; }
+      function frameToL(F, wx, wz) { const c = Math.cos(F.H), s = Math.sin(F.H); const dx = wx - F.O[0], dz = wz - F.O[1]; return [dx * c - dz * s, dx * s + dz * c]; }
+      const fwdOf = (H) => [Math.sin(H), Math.cos(H)];
+      const rightOf = (H) => [-Math.cos(H), Math.sin(H)];
+      function mkPoly(pts) {
+        const cum = [0];
+        for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+        return { pts, cum, len: cum[cum.length - 1] };
+      }
+      function polyAt(pl, s) {
+        const { pts, cum } = pl;
+        if (s <= 0) { const h = Math.atan2(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]); return [pts[0][0] + Math.sin(h) * s, pts[0][1] + Math.cos(h) * s, h]; }
+        let i = 1;
+        while (i < cum.length - 1 && cum[i] < s) i++;
+        const a = pts[i - 1], b = pts[i];
+        const seg = cum[i] - cum[i - 1] || 1;
+        const k = (s - cum[i - 1]) / seg;
+        const h = Math.atan2(b[0] - a[0], b[1] - a[1]);
+        return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, h];
+      }
+      function bezierPts(p0, d0, p3, d3, k0, k3, n) {
+        const p1 = [p0[0] + d0[0] * k0, p0[1] + d0[1] * k0], p2 = [p3[0] - d3[0] * k3, p3[1] - d3[1] * k3];
+        const out = [];
+        for (let i = 0; i <= n; i++) {
+          const t = i / n, u = 1 - t;
+          out.push([u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0], u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]]);
+        }
+        return out;
+      }
+      // Dikdörtgen çıkarma (eksene hizalı): r − h → en çok 4 parça
+      function rectSub(r, h) {
+        if (h.x1 <= r.x0 || h.x0 >= r.x1 || h.z1 <= r.z0 || h.z0 >= r.z1) return [r];
+        const out = [];
+        if (h.x0 > r.x0) out.push({ x0: r.x0, x1: h.x0, z0: r.z0, z1: r.z1 });
+        if (h.x1 < r.x1) out.push({ x0: h.x1, x1: r.x1, z0: r.z0, z1: r.z1 });
+        const cx0 = Math.max(r.x0, h.x0), cx1 = Math.min(r.x1, h.x1);
+        if (h.z0 > r.z0) out.push({ x0: cx0, x1: cx1, z0: r.z0, z1: h.z0 });
+        if (h.z1 < r.z1) out.push({ x0: cx0, x1: cx1, z0: h.z1, z1: r.z1 });
+        return out;
+      }
+      function rectInFrame(F, x0, x1, z0, z1) {
+        const a = frameToW(F, x0, z0), b = frameToW(F, x1, z1);
+        return { x0: Math.min(a[0], b[0]), x1: Math.max(a[0], b[0]), z0: Math.min(a[1], b[1]), z1: Math.max(a[1], b[1]) };
+      }
+
+      function makeCity(seed) {
+        const rnd = mulberry32(seed * 31 + 7);
+        const C = { seed, roads: [], nodes: [], lanes: [], conns: [], blocks: [], lots: [], boxes: [], parked: [], bulbs: [], crossings: [], loops: [], cars: [], peds: [], buildings: [], trees: [], lights: [], signs: [], marks: [], t: 0, changeT: 6 };
+        const addBox = (kind, r, h, extra) => { const b = Object.assign({ kind, minX: r.x0, maxX: r.x1, minZ: r.z0, maxZ: r.z1, h: h || 10, active: true }, extra || {}); C.boxes.push(b); return b; };
+        const hwH = (j) => (CITY_HZ[j] === 0 ? ROAD_KIND.bulvar.hw : ROAD_KIND.cadde.hw);
+        const hwV = () => ROAD_KIND.cadde.hw;
+
+        // ---- Yollar
+        CITY_VX.forEach((x, i) => C.roads.push(Object.assign({ id: 'V' + i, name: V_NAMES[i], kind: 'cadde', axis: 'z', c: x, a0: CITY_HZ[0], a1: CITY_HZ[2] }, ROAD_KIND.cadde)));
+        CITY_HZ.forEach((z, j) => { const k = z === 0 ? 'bulvar' : 'cadde'; C.roads.push(Object.assign({ id: 'H' + j, name: H_NAMES[j], kind: k, axis: 'x', c: z, a0: CITY_VX[0], a1: CITY_VX[3] }, ROAD_KIND[k])); });
+        const roadV = (i) => C.roads[i], roadH = (j) => C.roads[4 + j];
+
+        // ---- Kavşaklar
+        const nodeAt = {};
+        CITY_VX.forEach((x, i) => CITY_HZ.forEach((z, j) => {
+          const arms = { N: j < 2, S: j > 0, E: i < 3, W: i > 0 };
+          const nArms = Object.values(arms).filter(Boolean).length;
+          const n = { id: 'K' + i + j, i, j, x, z, hx: hwV(), hz: hwH(j), arms, lit: nArms >= 3, kind: nArms >= 3 ? 'lit' : 'L' };
+          if (n.lit) { n.phases = nodePhases(n); n.cycle = n.phases.reduce((a, p) => a + p[2], 0); n.off = rnd() * n.cycle; }
+          C.nodes.push(n);
+          nodeAt[i + ',' + j] = n;
+        }));
+
+        // ---- Bloklar ve ara sokaklar
+        let blocks = [];
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) {
+          blocks.push({ i, j, x0: CITY_VX[i] + hwV(), x1: CITY_VX[i + 1] - hwV(), z0: CITY_HZ[j] + hwH(j), z1: CITY_HZ[j + 1] - hwH(j + 1), split: false });
+        }
+        const order = blocks.map((b, k) => k).sort(() => rnd() - 0.5);
+        const sokakBlocks = order.slice(0, 2);
+        const sokaks = [];
+        sokakBlocks.forEach((k, si) => {
+          const b = blocks[k];
+          b.split = true;
+          const along = rnd() < 0.5 ? 'z' : 'x';
+          const kd = ROAD_KIND.sokak;
+          if (along === 'z') {
+            const xs = Math.round((b.x0 + b.x1) / 2 + (rnd() - 0.5) * 60);
+            const road = Object.assign({ id: 'S' + si, name: SOKAK_NAMES[si], kind: 'sokak', axis: 'z', c: xs, a0: CITY_HZ[b.j], a1: CITY_HZ[b.j + 1], oneway: rnd() < 0.5 ? 1 : -1, mainA: roadH(b.j), mainB: roadH(b.j + 1) }, kd);
+            sokaks.push(road);
+            b.parts = [{ x0: b.x0, x1: xs - kd.hw, z0: b.z0, z1: b.z1 }, { x0: xs + kd.hw, x1: b.x1, z0: b.z0, z1: b.z1 }];
+          } else {
+            const zs = Math.round((b.z0 + b.z1) / 2 + (rnd() - 0.5) * 50);
+            const road = Object.assign({ id: 'S' + si, name: SOKAK_NAMES[si], kind: 'sokak', axis: 'x', c: zs, a0: CITY_VX[b.i], a1: CITY_VX[b.i + 1], oneway: rnd() < 0.5 ? 1 : -1, mainA: roadV(b.i), mainB: roadV(b.i + 1) }, kd);
+            sokaks.push(road);
+            b.parts = [{ x0: b.x0, x1: b.x1, z0: b.z0, z1: zs - kd.hw }, { x0: b.x0, x1: b.x1, z0: zs + kd.hw, z1: b.z1 }];
+          }
+        });
+        sokaks.forEach((r) => C.roads.push(r));
+
+        // ---- Şeritler
+        const laneAxisPt = (road, t) => (road.axis === 'z' ? [road.c, t] : [t, road.c]);
+        function addLanes(road, tA, tB, nA, nB, gA, gB) {
+          const dirs = road.oneway ? [road.oneway] : [1, -1];
+          const made = [];
+          dirs.forEach((dir) => road.off.forEach((off, li) => {
+            const fwd = road.axis === 'z' ? [0, dir] : [dir, 0];
+            const H = Math.atan2(fwd[0], fwd[1]);
+            const rv = rightOf(H);
+            const ts = dir > 0 ? tA + gA : tB - gB, te = dir > 0 ? tB - gB : tA + gA;
+            const P = (t) => { const a = laneAxisPt(road, t); return [a[0] + off * rv[0], a[1] + off * rv[1]]; };
+            const p0 = P(ts), p1 = P(te);
+            const lane = Object.assign(mkPoly([p0, p1]), {
+              id: 'L' + C.lanes.length, kind: 'lane', road, dir, li, off, H, p0, p1, ts,
+              nodeA: dir > 0 ? nA : nB, nodeB: dir > 0 ? nB : nA, outs: [], taps: [], merges: [], F: { O: p0, H }, excl: [], cars: []
+            });
+            lane.sOf = (t) => (t - ts) * dir;
+            C.lanes.push(lane);
+            made.push(lane);
+          }));
+          return made;
+        }
+        const gapAt = (n, road) => {
+          if (!n) return 0;
+          const half = road.axis === 'z' ? n.hz : n.hx;
+          return n.lit ? half + 34 : half + 12;
+        };
+        CITY_VX.forEach((x, i) => { for (let j = 0; j < 2; j++) { const a = nodeAt[i + ',' + j], b = nodeAt[i + ',' + (j + 1)]; addLanes(roadV(i), a.z, b.z, a, b, gapAt(a, roadV(i)), gapAt(b, roadV(i))); } });
+        CITY_HZ.forEach((z, j) => { for (let i = 0; i < 3; i++) { const a = nodeAt[i + ',' + j], b = nodeAt[(i + 1) + ',' + j]; addLanes(roadH(j), a.x, b.x, a, b, gapAt(a, roadH(j)), gapAt(b, roadH(j))); } });
+
+        // ---- Bağlantılar (kavşak içi yollar)
+        const mkConn = (from, fromS, to, toS, type, ctrl, node) => {
+          const a = polyAt(from, fromS), b = polyAt(to, toS);
+          const p0 = [a[0], a[1]], p3 = [b[0], b[1]];
+          const d0 = fwdOf(from.H), d3 = fwdOf(to.H);
+          let pts;
+          if (type === 'straight') {
+            const L = Math.hypot(p3[0] - p0[0], p3[1] - p0[1]);
+            pts = bezierPts(p0, d0, p3, d3, L / 3, L / 3, 8);
+          } else {
+            const v = [p3[0] - p0[0], p3[1] - p0[1]];
+            const t0 = Math.abs(v[0] * d0[0] + v[1] * d0[1]), t3 = Math.abs(v[0] * d3[0] + v[1] * d3[1]);
+            pts = bezierPts(p0, d0, p3, d3, 0.552 * t0, 0.552 * t3, 20);
+          }
+          const c = Object.assign(mkPoly(pts), { id: 'C' + C.conns.length, kind: 'conn', from, fromS, to, toS, type, ctrl, node, axis: from.road.axis === 'z' ? 'V' : 'H', H: from.H });
+          C.conns.push(c);
+          return c;
+        };
+        C.nodes.forEach((n) => {
+          const ins = C.lanes.filter((l) => l.nodeB === n), outs = C.lanes.filter((l) => l.nodeA === n);
+          ins.forEach((L) => {
+            const opts = [];
+            outs.forEach((O) => {
+              const dH = wrapA(O.H - L.H);
+              if (Math.abs(dH) < 0.1 && O.road === L.road && O.li === L.li) opts.push([O, 'straight']);
+              else if (Math.abs(dH + Math.PI / 2) < 0.1 && L.li === 0) opts.push([O, 'right']);
+            });
+            const hasStraight = opts.some((o) => o[1] === 'straight');
+            const nArms = Object.values(n.arms).filter(Boolean).length;
+            if ((!hasStraight || (n.lit && nArms === 3)) && L.li === L.road.off.length - 1) {
+              outs.forEach((O) => { if (Math.abs(wrapA(O.H - L.H) - Math.PI / 2) < 0.1 && O.li === O.road.off.length - 1) opts.push([O, 'left']); });
+            }
+            opts.forEach(([O, type]) => {
+              const c = mkConn(L, L.len, O, 0, type, n.lit ? 'light' : 'none', n);
+              L.outs.push(c);
+            });
+          });
+        });
+
+        // ---- Ara sokak şeritleri: sağa dönüşle girilir, sağa dönüşle çıkılır (tek yön)
+        C.sokakNodes = [];
+        sokaks.forEach((r) => {
+          const tA = r.a0, tB = r.a1;
+          const gA = r.mainA.hw + 34, gB = r.mainB.hw + 34;
+          const [L] = addLanes(r, tA, tB, null, null, gA, gB);
+          r.lane = L;
+          const startMain = r.oneway > 0 ? r.mainA : r.mainB;
+          const endMain = r.oneway > 0 ? r.mainB : r.mainA;
+          const fS = fwdOf(L.H);
+          const mIn = C.lanes.find((m) => m.road === startMain && m.li === 0 && (rightOf(m.H)[0] * fS[0] + rightOf(m.H)[1] * fS[1]) > 0.5);
+          const hOut = wrapA(L.H - Math.PI / 2);
+          const axisT = r.c;
+          // giriş: ana şeritte sokak eksenine R kala ayrıl
+          const segIn = C.lanes.filter((m) => m.road === startMain && m.li === 0 && Math.abs(wrapA(m.H - mIn.H)) < 0.1).find((m) => { const s = m.sOf(axisT); return s > 0 && s < m.len; });
+          const R = startMain.hw + 34 - segIn.off;
+          const cIn = mkConn(segIn, segIn.sOf(axisT) - R, L, 0, 'right', 'none', null);
+          segIn.taps.push(cIn);
+          const segOut = C.lanes.filter((m) => m.road === endMain && m.li === 0 && Math.abs(wrapA(m.H - hOut)) < 0.1).find((m) => { const s = m.sOf(axisT); return s > 0 && s < m.len; });
+          const R2 = endMain.hw + 34 - segOut.off;
+          const cOut = mkConn(L, L.len, segOut, segOut.sOf(axisT) + R2, 'right', 'merge', null);
+          L.outs.push(cOut);
+          segOut.merges.push(cOut);
+          // ana şeritlerde sokak ağzı: park yok, iki yanda kaldırım çıkıntısı
+          [segIn, segOut].forEach((m) => { const s = m.sOf(axisT); m.excl.push([s - r.hw - 24, s + r.hw + 24, 'mouth', s]); });
+        });
+
+        // ---- Otoparklar (hastane + 2 belediye): bölünmemiş bloklardan rastgele 3 tanesine
+        const free = order.filter((k) => !sokakBlocks.includes(k)).slice(0, 3);
+        const LOT_KINDS = [['hastane', 'Hastane Otoparkı'], ['belediye', 'Belediye Otoparkı 1'], ['belediye', 'Belediye Otoparkı 2']];
+        free.forEach((k, li) => {
+          const b = blocks[k];
+          const sides = [['S', roadH(b.j), [0, 1]], ['N', roadH(b.j + 1), [0, -1]], ['W', roadV(b.i), [1, 0]], ['E', roadV(b.i + 1), [-1, 0]]];
+          const [side, road, inward] = sides[Math.floor(rnd() * 4)];
+          // bloğa doğru sağı bakan dış şerit
+          const cand = C.lanes.filter((m) => m.road === road && m.li === 0 && (rightOf(m.H)[0] * inward[0] + rightOf(m.H)[1] * inward[1]) > 0.5);
+          const lo = road.axis === 'z' ? b.z0 : b.x0, hi = road.axis === 'z' ? b.z1 : b.x1;
+          const tMid = lo + SIDEWALK + 132 + rnd() * Math.max(0, hi - lo - 2 * SIDEWALK - 264);
+          const lane = cand.find((m) => { const s = m.sOf(tMid); return s > 60 && s < m.len - 60; });
+          const s = lane.sOf(tMid);
+          const Hl = wrapA(lane.H - Math.PI / 2);
+          const lp = polyAt(lane, s);
+          const fl = fwdOf(Hl);
+          const F = { O: [lp[0] + fl[0] * 210, lp[1] + fl[1] * 210], H: Hl };
+          const lot = makeLot((seed * 13 + li * 101 + 5) >>> 0, 'otopark');
+          lot.boxes = lot.boxes.filter((o) => !(o.kind === 'bound' && o.z < -100));
+          lot.boxes.push({ kind: 'bound', x: -78, z: -130, w: 108, d: 4, h: 16, minX: -132, maxX: -24, minZ: -132, maxZ: -128 });
+          lot.boxes.push({ kind: 'bound', x: 78, z: -130, w: 108, d: 4, h: 16, minX: 24, maxX: 132, minZ: -132, maxZ: -128 });
+          const rect = rectInFrame(F, -132, 132, -132, 132);
+          const drive = rectInFrame(F, -24, 24, -166, -132);
+          lane.excl.push([s - 56, s + 56, 'drive', s]);
+          const L = { kind: LOT_KINDS[li][0], name: LOT_KINDS[li][1], block: b, lane, s, F, lot, rect, drive, boxes: [] };
+          lot.boxes.forEach((o) => {
+            const r = rectInFrame(F, o.minX, o.maxX, o.minZ, o.maxZ);
+            const wb = addBox('lot-' + o.kind, r, o.h, { lotRef: L, local: o });
+            L.boxes.push(wb);
+          });
+          b.lot = L;
+          C.lots.push(L);
+        });
+
+        // ---- Blok gövdeleri (kaldırım + iç alan) engel olarak; otopark ve giriş yolu boş
+        blocks.forEach((b) => {
+          const parts = b.parts || [{ x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1 }];
+          parts.forEach((p) => {
+            let rs = [p];
+            if (b.lot) { rs = rs.flatMap((r) => rectSub(r, b.lot.rect)); rs = rs.flatMap((r) => rectSub(r, b.lot.drive)); }
+            rs.forEach((r) => addBox('walk', r, 4));
+            C.blocks.push(Object.assign({}, p, { lot: b.lot || null, hospital: b.lot && b.lot.kind === 'hastane' }));
+          });
+        });
+        // Şehrin dışı (çevre yolunun dış kaldırımı ve binaları)
+        const OX = CITY_VX[3] + hwV(), OZ = CITY_HZ[2] + hwH(2);
+        [{ x0: -OX - 400, x1: -OX, z0: -OZ - 400, z1: OZ + 400 }, { x0: OX, x1: OX + 400, z0: -OZ - 400, z1: OZ + 400 },
+          { x0: -OX, x1: OX, z0: -OZ - 400, z1: -OZ }, { x0: -OX, x1: OX, z0: OZ, z1: OZ + 400 }].forEach((r) => addBox('walk', r, 4, { outer: true }));
+        C.outer = { x0: -OX, x1: OX, z0: -OZ, z1: OZ };
+
+        // ---- Park şeritleri: her dış şeridin sağında araçlar; doluluk şeritten şeride değişir
+        const carBox = (lane, s, side) => {
+          const xc = side * 29;
+          const r = rectInFrame(lane.F, xc - CAR_W / 2, xc + CAR_W / 2, s - CAR_L / 2, s + CAR_L / 2);
+          return r;
+        };
+        const bulb = (lane, s0, s1, side) => {
+          const r = rectInFrame(lane.F, side < 0 ? -44 : 24, side < 0 ? -24 : 44, s0, s1);
+          C.bulbs.push(addBox('bulb', r, 4));
+        };
+        let colorK = 0;
+        C.lanes.filter((l) => l.li === 0).forEach((lane) => {
+          const sides = lane.road.kind === 'sokak' ? [-1, 1] : [-1];
+          sides.forEach((side) => {
+            const ex = side < 0 ? lane.excl.slice() : [];
+            ex.push([-1e9, 24, 'end'], [lane.len - 24, 1e9, 'end']);
+            bulb(lane, 0, 24, side);
+            bulb(lane, lane.len - 24, lane.len, side);
+            ex.filter((e) => e[2] === 'mouth' || e[2] === 'drive').forEach((e) => {
+              const w = e[2] === 'mouth' ? 24 : 20;
+              bulb(lane, e[0], e[0] + w, side);
+              bulb(lane, e[1] - w, e[1], side);
+            });
+            ex.sort((a, b) => a[0] - b[0]);
+            // boş aralıklar
+            const freeR = [];
+            let cur = -1e9;
+            ex.forEach((e) => { if (e[0] > cur + 1) freeR.push([cur, e[0]]); cur = Math.max(cur, e[1]); });
+            if (cur < 1e9) freeR.push([cur, 1e9]);
+            const dens = rnd() < 0.25 ? 0.95 : 0.35 + rnd() * 0.55;   // bazı şeritler tamamen dolu
+            freeR.forEach(([a, b]) => {
+              a = Math.max(a, 24) + 3; b = Math.min(b, lane.len - 24) - 3;
+              let p = a + rnd() * 4;
+              while (p + CAR_L <= b) {
+                const s = p + CAR_L / 2;
+                const box = addBox('car', carBox(lane, s, side), 10, { lane, s, side, H: lane.H + (rnd() < 0.85 ? 0 : Math.PI), color: colorK++ });
+                C.parked.push(box);
+                p += CAR_L;
+                const r = rnd();
+                p += r < dens ? 7 + rnd() * 9 : r < dens + (1 - dens) * 0.45 ? 30 + rnd() * 12 : 44 + rnd() * 18;
+              }
+            });
+          });
+        });
+
+        // ---- Yaya yolları (her bloğun kaldırım ortası) ve yaya geçitleri
+        const loopOf = (r, inset) => {
+          const x0 = r.x0 + inset, x1 = r.x1 - inset, z0 = r.z0 + inset, z1 = r.z1 - inset;
+          const L = mkPoly([[x0, z0], [x1, z0], [x1, z1], [x0, z1], [x0, z0]]);
+          L.r = { x0, x1, z0, z1 };
+          L.ev = [];
+          return L;
+        };
+        C.blocks.forEach((b) => C.loops.push(loopOf(b, 17)));
+        const outerLoop = loopOf({ x0: -OX - 17, x1: OX + 17, z0: -OZ - 17, z1: OZ + 17 }, 0);
+        outerLoop.outer = true;
+        C.loops.push(outerLoop);
+        const uOn = (L, p) => {
+          const { x0, x1, z0, z1 } = L.r;
+          const e = 1.5;
+          if (Math.abs(p[1] - z0) < e && p[0] >= x0 - e && p[0] <= x1 + e) return p[0] - x0;
+          if (Math.abs(p[0] - x1) < e && p[1] >= z0 - e && p[1] <= z1 + e) return (x1 - x0) + (p[1] - z0);
+          if (Math.abs(p[1] - z1) < e && p[0] >= x0 - e && p[0] <= x1 + e) return (x1 - x0) + (z1 - z0) + (x1 - p[0]);
+          if (Math.abs(p[0] - x0) < e && p[1] >= z0 - e && p[1] <= z1 + e) return 2 * (x1 - x0) + (z1 - z0) + (z1 - p[1]);
+          return null;
+        };
+        const addCrossing = (A, B, node, kind, extra) => {
+          const ends = [A, B].map((p) => { for (const L of C.loops) { const u = uOn(L, p); if (u !== null) return { loop: L, u }; } return null; });
+          if (!ends[0] || !ends[1]) return;
+          const c = Object.assign({ A, B, len: Math.hypot(B[0] - A[0], B[1] - A[1]), node, kind, ends }, extra || {});
+          C.crossings.push(c);
+          ends[0].loop.ev.push({ u: ends[0].u, c, side: 0 });
+          ends[1].loop.ev.push({ u: ends[1].u, c, side: 1 });
+        };
+        C.nodes.filter((n) => n.lit).forEach((n) => {
+          const { x, z, hx, hz } = n;
+          if (n.arms.E) addCrossing([x + hx + 17, z - hz - 17], [x + hx + 17, z + hz + 17], n, 'lit', { dir: 'z' });
+          if (n.arms.W) addCrossing([x - hx - 17, z - hz - 17], [x - hx - 17, z + hz + 17], n, 'lit', { dir: 'z' });
+          if (n.arms.N) addCrossing([x - hx - 17, z + hz + 17], [x + hx + 17, z + hz + 17], n, 'lit', { dir: 'x' });
+          if (n.arms.S) addCrossing([x - hx - 17, z - hz - 17], [x + hx + 17, z - hz - 17], n, 'lit', { dir: 'x' });
+        });
+        sokaks.forEach((r) => {
+          [[r.a0, r.mainA, 1], [r.a1, r.mainB, -1]].forEach(([t, main, sg]) => {
+            const q = t + sg * (main.hw + 17);
+            if (r.axis === 'z') addCrossing([r.c - r.hw - 17, q], [r.c + r.hw + 17, q], null, 'sokak', { dir: 'x', road: r });
+            else addCrossing([q, r.c - r.hw - 17], [q, r.c + r.hw + 17], null, 'sokak', { dir: 'z', road: r });
+          });
+        });
+        C.loops.forEach((L) => L.ev.sort((a, b) => a.u - b.u));
+
+        // ---- Trafik ışıkları (her yaklaşımın sağ köşesinde)
+        C.lanes.filter((l) => l.li === 0 && l.nodeB && l.nodeB.lit).forEach((l) => {
+          const rv = rightOf(l.H);
+          const k = l.road.hw - l.off + 8;
+          C.lights.push({ node: l.nodeB, key: armOfH(l.H), x: l.p1[0] + rv[0] * k, z: l.p1[1] + rv[1] * k, faceH: l.H + Math.PI, lane: l });
+        });
+
+        // ---- Binalar ve ağaçlar (görsel)
+        C.blocks.forEach((b) => {
+          const inner = { x0: b.x0 + SIDEWALK + 4, x1: b.x1 - SIDEWALK - 4, z0: b.z0 + SIDEWALK + 4, z1: b.z1 - SIDEWALK - 4 };
+          let rs = [inner];
+          if (b.lot) { const lr = b.lot.rect; rs = rectSub(inner, { x0: lr.x0 - 8, x1: lr.x1 + 8, z0: lr.z0 - 8, z1: lr.z1 + 8 }); }
+          rs = rs.filter((r) => r.x1 - r.x0 > 30 && r.z1 - r.z0 > 30);
+          if (b.hospital && rs.length) {
+            rs.sort((p, q) => (q.x1 - q.x0) * (q.z1 - q.z0) - (p.x1 - p.x0) * (p.z1 - p.z0));
+            const hr = rs.shift();
+            C.buildings.push(Object.assign({ h: 78, kind: 'hastane' }, hr));
+          }
+          rs.forEach((r) => {
+            const alongX = r.x1 - r.x0 >= r.z1 - r.z0;
+            let a = alongX ? r.x0 : r.z0;
+            const end = alongX ? r.x1 : r.z1;
+            while (a < end - 20) {
+              const len = Math.min(end - a, 70 + rnd() * 80);
+              const nb = alongX ? { x0: a, x1: a + len - 3, z0: r.z0, z1: r.z1 } : { x0: r.x0, x1: r.x1, z0: a, z1: a + len - 3 };
+              C.buildings.push(Object.assign({ h: 34 + rnd() * 90, color: Math.floor(rnd() * 7), kind: 'bina' }, nb));
+              a += len;
+            }
+          });
+          // kaldırım ağaçları
+          const edges = [[b.x0, b.z0 + 8, b.x1, b.z0 + 8], [b.x0, b.z1 - 8, b.x1, b.z1 - 8], [b.x0 + 8, b.z0, b.x0 + 8, b.z1], [b.x1 - 8, b.z0, b.x1 - 8, b.z1]];
+          edges.forEach(([ax, az, bx, bz]) => {
+            const L = Math.hypot(bx - ax, bz - az);
+            for (let d = 50; d < L - 50; d += 60 + rnd() * 30) {
+              const x = ax + (bx - ax) * d / L, z = az + (bz - az) * d / L;
+              if (b.lot && x > b.lot.drive.x0 - 30 && x < b.lot.drive.x1 + 30 && z > b.lot.drive.z0 - 30 && z < b.lot.drive.z1 + 30) continue;
+              C.trees.push([x, z, 0.8 + rnd() * 0.4]);
+            }
+          });
+        });
+        // dış çevre binaları
+        const ring = [[-OX - SIDEWALK - 4, -OZ - SIDEWALK, -OX - SIDEWALK - 84, OZ + SIDEWALK, 'z'], [OX + SIDEWALK + 4, -OZ - SIDEWALK, OX + SIDEWALK + 84, OZ + SIDEWALK, 'z'],
+          [-OX - SIDEWALK, -OZ - SIDEWALK - 4, OX + SIDEWALK, -OZ - SIDEWALK - 84, 'x'], [-OX - SIDEWALK, OZ + SIDEWALK + 4, OX + SIDEWALK, OZ + SIDEWALK + 84, 'x']];
+        ring.forEach(([ax, az, bx, bz, al]) => {
+          const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), z0 = Math.min(az, bz), z1 = Math.max(az, bz);
+          let a = al === 'x' ? x0 : z0;
+          const end = al === 'x' ? x1 : z1;
+          while (a < end - 20) {
+            const len = Math.min(end - a, 80 + rnd() * 90);
+            C.buildings.push(Object.assign({ h: 40 + rnd() * 100, color: Math.floor(rnd() * 7), kind: 'bina' }, al === 'x' ? { x0: a, x1: a + len - 3, z0, z1 } : { x0, x1, z0: a, z1: a + len - 3 }));
+            a += len;
+          }
+        });
+        // tabelalar
+        C.lots.forEach((L) => {
+          const p = frameToW(L.F, -44, -150);
+          C.signs.push({ text: L.kind === 'hastane' ? 'H  HASTANE OTOPARKI' : 'P  BELEDİYE OTOPARKI', x: p[0], z: p[1], h: L.F.H + Math.PI, kind: L.kind });
+        });
+        C.roads.forEach((r) => {
+          const l = C.lanes.find((m) => m.road === r && m.li === 0);
+          const rv = rightOf(l.H);
+          const k = r.hw - l.off + 10;
+          const p = polyAt(l, Math.min(60, l.len / 2));
+          C.signs.push({ text: r.name.toUpperCase(), x: p[0] + rv[0] * k, z: p[1] + rv[1] * k, h: l.H + Math.PI / 2, kind: 'road' });
+        });
+
+        cityPrep(C);
+        buildGrid(C);
+        // ---- Trafik ve yayalar
+        spawnTraffic(C, rnd, 34);
+        spawnPeds(C, rnd, 64);
+        C.rnd = rnd;
+        // robotun başlangıcı: bulvarda doğuya giden dış şerit
+        const sl = C.lanes.find((l) => l.road.kind === 'bulvar' && l.li === 0 && Math.abs(l.H - Math.PI / 2) < 0.1);
+        const sp = polyAt(sl, 30);
+        C.start = { x: sp[0], z: sp[1], h: sl.H, lane: sl };
+        C.cars = C.cars.filter((c) => Math.hypot(c.x - sp[0], c.z - sp[1]) > 80);
+        return C;
+      }
+
+      // ---- Engel ızgarası (sensör ışınları ve çarpışma için)
+      const GRID_CELL = 100;
+      function buildGrid(C) {
+        C.grid = new Map();
+        C.boxes.forEach((b) => {
+          for (let gx = Math.floor(b.minX / GRID_CELL); gx <= Math.floor(b.maxX / GRID_CELL); gx++)
+            for (let gz = Math.floor(b.minZ / GRID_CELL); gz <= Math.floor(b.maxZ / GRID_CELL); gz++) {
+              const k = gx + ',' + gz;
+              if (!C.grid.has(k)) C.grid.set(k, []);
+              C.grid.get(k).push(b);
+            }
+        });
+      }
+      function rayBox(ox, oz, dx, dz, b, far) {
+        let t0 = 0, t1 = far;
+        if (Math.abs(dx) < 1e-9) { if (ox < b.minX || ox > b.maxX) return Infinity; } else {
+          let a = (b.minX - ox) / dx, c = (b.maxX - ox) / dx; if (a > c) { const q = a; a = c; c = q; }
+          t0 = Math.max(t0, a); t1 = Math.min(t1, c);
+        }
+        if (Math.abs(dz) < 1e-9) { if (oz < b.minZ || oz > b.maxZ) return Infinity; } else {
+          let a = (b.minZ - oz) / dz, c = (b.maxZ - oz) / dz; if (a > c) { const q = a; a = c; c = q; }
+          t0 = Math.max(t0, a); t1 = Math.min(t1, c);
+        }
+        return t0 <= t1 ? t0 : Infinity;
+      }
+      function cityCast(C, ox, oz, dx, dz, far) {
+        far = far || 400;
+        let best = Infinity;
+        const seen = new Set();
+        for (let d = 0; d <= far + GRID_CELL; d += GRID_CELL / 2) {
+          const px = ox + dx * Math.min(d, far), pz = oz + dz * Math.min(d, far);
+          const gx = Math.floor(px / GRID_CELL), gz = Math.floor(pz / GRID_CELL);
+          for (let ix = gx - 1; ix <= gx + 1; ix++) for (let iz = gz - 1; iz <= gz + 1; iz++) {
+            const arr = C.grid.get(ix + ',' + iz);
+            if (!arr) continue;
+            for (const b of arr) {
+              if (!b.active || seen.has(b)) continue;
+              seen.add(b);
+              const t = rayBox(ox, oz, dx, dz, b, far);
+              if (t < best) best = t;
+            }
+          }
+          if (d > best) break;
+        }
+        // hareketli araçlar (yönlü kutu) ve yayalar (daire)
+        for (const c of C.cars) {
+          const ex = c.x - ox, ez = c.z - oz;
+          if (ex * ex + ez * ez > (far + 20) * (far + 20)) continue;
+          const cs = Math.cos(c.h), sn = Math.sin(c.h);
+          const lx = -ex * cs + ez * sn, lz = -ex * sn - ez * cs;   // ışın başlangıcı aracın yerelinde
+          const ldx = dx * cs - dz * sn, ldz = dx * sn + dz * cs;
+          const t = rayBox(lx, lz, ldx, ldz, { minX: -CAR_W / 2, maxX: CAR_W / 2, minZ: -CAR_L / 2, maxZ: CAR_L / 2 }, far);
+          if (t < best) best = t;
+        }
+        for (const p of C.peds) {
+          const ex = p.x - ox, ez = p.z - oz;
+          const tc = ex * dx + ez * dz;
+          if (tc < 0 || tc > far + 4) continue;
+          const d2 = ex * ex + ez * ez - tc * tc;
+          if (d2 > 3.5 * 3.5) continue;
+          const t = tc - Math.sqrt(3.5 * 3.5 - d2);
+          if (t >= 0 && t < best) best = t;
+        }
+        return best <= far ? best : Infinity;
+      }
+      function cityBlocked(C, x, z, h) {
+        const c = Math.cos(h), sn = Math.sin(h);
+        for (const [lx, lz] of ROBOT_FOOT) {
+          const wx = x + lx * c + lz * sn, wz = z - lx * sn + lz * c;
+          const arr = C.grid.get(Math.floor(wx / GRID_CELL) + ',' + Math.floor(wz / GRID_CELL));
+          if (arr) for (const b of arr) if (b.active && wx > b.minX - 0.3 && wx < b.maxX + 0.3 && wz > b.minZ - 0.3 && wz < b.maxZ + 0.3) return b;
+          for (const k of C.cars) {
+            const ex = wx - k.x, ez = wz - k.z;
+            if (ex * ex + ez * ez > 400) continue;
+            const kc = Math.cos(k.h), ks = Math.sin(k.h);
+            const ux = ex * kc - ez * ks, uz = ex * ks + ez * kc;
+            if (Math.abs(ux) < CAR_W / 2 + 0.3 && Math.abs(uz) < CAR_L / 2 + 0.3) return k;
+          }
+          for (const p of C.peds) if ((wx - p.x) * (wx - p.x) + (wz - p.z) * (wz - p.z) < 3.5 * 3.5) return p;
+        }
+        return null;
+      }
+      function citySonars(C, P) {
+        const out = {};
+        const c = Math.cos(P.h), s = Math.sin(P.h);
+        for (const [n, lx0, lz0, yaw] of ROBOT_SENS) {
+          const lx = lx0 + Math.sin(yaw) * 2.1, lz = lz0 + Math.cos(yaw) * 2.1;
+          const ox = P.x + lx * c + lz * s, oz = P.z - lx * s + lz * c;
+          const h = P.h + yaw;
+          out[n] = cityCast(C, ox, oz, Math.sin(h), Math.cos(h), 400);
+        }
+        return out;
+      }
+
+      // ---- Trafik ışığı durumu: kol (N/S/E/W), 'WL' gibi sola dönüş ya da 'P' (yaya)
+      function lightState(n, key, t) {
+        let u = ((t + n.off) % n.cycle + n.cycle) % n.cycle;
+        for (const [set, col, d] of n.phases) {
+          if (u < d) {
+            if (!set.includes(key)) return { c: 'r', rem: 0 };
+            return { c: col, rem: col === 'g' ? d - u : 0 };
+          }
+          u -= d;
+        }
+        return { c: 'r', rem: 0 };
+      }
+      const connKey = (conn) => armOfH(conn.from.H) + (conn.type === 'left' ? 'L' : '');
+
+      // ---- Araçlar
+      function edgePos(e, s) { return polyAt(e, s); }
+      function spawnTraffic(C, rnd, n) {
+        const lanes = C.lanes.filter((l) => l.len > 120);
+        let tries = 0;
+        while (C.cars.length < n && tries++ < 2000) {
+          const lane = lanes[Math.floor(rnd() * lanes.length)];
+          const s = 20 + rnd() * (lane.len - 60);
+          if (C.cars.some((c) => c.edge === lane && Math.abs(c.s - s) < 60)) continue;
+          const car = { id: C.cars.length, edge: lane, s, v: 0, vmax: 34 + rnd() * 10, plan: null, grant: false, color: Math.floor(rnd() * 9), x: 0, z: 0, h: 0, stopT: 0 };
+          choosePlan(C, car, rnd);
+          const p = edgePos(lane, s);
+          car.x = p[0]; car.z = p[1]; car.h = p[2];
+          C.cars.push(car);
+        }
+      }
+      function choosePlan(C, car, rnd, preferTap) {
+        const lane = car.edge;
+        const opts = [];
+        lane.taps.forEach((t) => { if (t.fromS > car.s + 30) opts.push([t, 0.3]); });
+        lane.outs.forEach((o) => opts.push([o, o.type === 'straight' ? 0.6 : o.type === 'right' ? 0.35 : 0.3]));
+        if (!opts.length) { car.plan = null; return; }
+        const tot = opts.reduce((a, o) => a + o[1], 0);
+        let r = rnd() * tot;
+        for (const o of opts) { r -= o[1]; if (r <= 0) { car.plan = o[0]; return; } }
+        car.plan = opts[opts.length - 1][0];
+      }
+      // Bir şeritte s0'dan sonraki boş alan (araçlar, robot, oraya giden araçlar)
+      function laneSpace(C, lane, s0, self) {
+        let space = 1e9, incoming = 0;
+        for (const c of C.cars) {
+          if (c === self) continue;
+          if (c.edge === lane && c.s > s0 - 30) space = Math.min(space, c.s - CAR_L / 2 - s0);
+          else if (c.edge.kind === 'conn' && c.edge.to === lane && Math.abs(c.edge.toS - s0) < 40) incoming++;
+          else if (c.edge.kind === 'lane' && c.plan && c.plan.to === lane && c.grant && Math.abs(c.plan.toS - s0) < 40) incoming++;
+        }
+        const R = C.robot;
+        if (R && R.active && R.lane === lane && R.s > s0 - 30) space = Math.min(space, R.s - 14 - s0);
+        if (R && R.active && R.conn && R.conn.to === lane && Math.abs(R.conn.toS - s0) < 40) incoming++;
+        return space - incoming * 32;
+      }
+      function mergeClear(C, conn, self) {
+        const m = conn.to, s0 = conn.toS;
+        for (const c of C.cars) {
+          if (c === self) continue;
+          if (c.edge === m && c.s > s0 - 120 && c.s < s0 + 34) return false;
+          if (c.edge.kind === 'conn' && c.edge.to === m && c.edge !== conn && Math.abs(c.edge.toS - s0) < 130) return false;
+        }
+        const R = C.robot;
+        if (R && R.active && R.lane === m && R.s > s0 - 230 && R.s < s0 + 40) return false;
+        if (R && R.active && R.conn && R.conn.to === m && Math.abs(R.conn.toS - s0) < 200) return false;
+        return true;
+      }
+      function permit(C, conn, self, speed) {
+        const sp = laneSpace(C, conn.to, conn.toS, self);
+        if (sp < 40) return false;
+        if (conn.ctrl === 'light') {
+          const L = lightState(conn.node, connKey(conn), C.t);
+          return L.c === 'g' && L.rem >= conn.len / speed + 1.2;
+        }
+        if (conn.ctrl === 'merge') return mergeClear(C, conn, self);
+        return true;
+      }
+      // Aracın önündeki yol üzerinde en yakın engelin uzaklığı
+      function pathAhead(car, maxD) {
+        const pts = [];
+        let e = car.edge, s = car.s, plan = car.plan, d = 0;
+        const step = 4;
+        let guard = 0;
+        while (d < maxD && guard++ < 200) {
+          const end = e.kind === 'lane' ? (plan ? plan.fromS : e.len) : e.len;
+          if (s + step <= end) { s += step; d += step; const p = polyAt(e, s); pts.push([p[0], p[1], d]); continue; }
+          if (e.kind === 'lane') { if (!plan) break; e = plan; s = 0; plan = null; }
+          else { const nx = e.to; s = e.toS; e = nx; plan = null; }
+        }
+        return pts;
+      }
+      function obstacleGap(C, car, look) {
+        const pts = pathAhead(car, look);
+        let best = Infinity;
+        const near = [];
+        for (const o of C.cars) if (o !== car && Math.abs(o.x - car.x) < look + 30 && Math.abs(o.z - car.z) < look + 30) near.push([o, 9.5, 6, 2.5]);
+        const R = C.robot;
+        if (R && R.active && Math.abs(R.x - car.x) < look + 40 && Math.abs(R.z - car.z) < look + 40) near.push([R, 10, 5.5, R.park ? 26 : 12]);
+        for (const pt of pts) {
+          if (pt[2] - 6 > best) break;
+          for (const [o, r, off, margin] of near) {
+            const fx = Math.sin(o.h), fz = Math.cos(o.h);
+            for (const k of [-off, off]) {
+              const cx = o.x + fx * k, cz = o.z + fz * k;
+              const dd = (pt[0] - cx) * (pt[0] - cx) + (pt[1] - cz) * (pt[1] - cz);
+              if (dd < (9.5 + r) * (9.5 + r)) {
+                // kendi arkamızdaki (yan şeritten geçen) araçları sayma
+                const rel = (o.x - car.x) * Math.sin(car.h) + (o.z - car.z) * Math.cos(car.h);
+                if (rel > 0) best = Math.min(best, pt[2] - 6 - margin);
+              }
+            }
+          }
+          for (const p of C.peds) {
+            const dd = (pt[0] - p.x) * (pt[0] - p.x) + (pt[1] - p.z) * (pt[1] - p.z);
+            if (dd < 14 * 14) best = Math.min(best, pt[2] - 6 - 6);
+          }
+        }
+        return best;
+      }
+      function updateCars(C, dt) {
+        const rnd = C.rnd;
+        for (const car of C.cars) {
+          const e = car.edge;
+          let limit = car.vmax;
+          if (e.kind === 'conn' && e.type !== 'straight') limit = Math.min(limit, 22);
+          let free = obstacleGap(C, car, Math.max(40, car.v * 1.6 + 30));
+          if (e.kind === 'lane' && car.plan) {
+            const toEnd = car.plan.fromS - car.s;
+            if (car.plan.type !== 'straight' && toEnd < 60) limit = Math.min(limit, 22 + toEnd * 0.4);
+            if (!car.grant && toEnd < 80) car.grant = permit(C, car.plan, car, 30);
+            if (!car.grant) free = Math.min(free, toEnd - CAR_L / 2 - 1);
+          }
+          const vdes = Math.max(0, Math.min(limit, Math.sqrt(Math.max(0, 2 * 70 * (free - 2)))));
+          if (vdes < car.v) car.v = Math.max(vdes, car.v - 220 * dt); else car.v = Math.min(vdes, car.v + 45 * dt);
+          if (free < 1) car.v = 0;
+          car.stopT = car.v < 1 ? car.stopT + dt : 0;
+          car.s += car.v * dt;
+          // kenar değişimi
+          let guard = 0;
+          while (guard++ < 4) {
+            const ed = car.edge;
+            if (ed.kind === 'lane') {
+              if (car.plan && car.s >= car.plan.fromS) { const over = car.s - car.plan.fromS; car.edge = car.plan; car.s = over; car.plan = null; car.grant = false; continue; }
+              if (!car.plan && car.s >= ed.len) car.s = ed.len;
+              break;
+            } else if (car.s >= ed.len) {
+              const over = car.s - ed.len;
+              car.edge = ed.to; car.s = ed.toS + over; car.grant = false;
+              choosePlan(C, car, rnd);
+              continue;
+            }
+            break;
+          }
+          const p = polyAt(car.edge, car.s);
+          car.x = p[0]; car.z = p[1]; car.h = p[2];
+        }
+      }
+
+      // ---- Yayalar
+      function loopPos(L, u) {
+        u = ((u % L.len) + L.len) % L.len;
+        const p = polyAt(L, u);
+        return p;
+      }
+      function spawnPeds(C, rnd, n) {
+        const tot = C.loops.reduce((a, L) => a + L.len, 0);
+        for (let i = 0; i < n; i++) {
+          let r = rnd() * tot, L = C.loops[0];
+          for (const q of C.loops) { r -= q.len; if (r <= 0) { L = q; break; } }
+          const u = rnd() * L.len;
+          const p = loopPos(L, u);
+          C.peds.push({ id: i, loop: L, u, dir: rnd() < 0.5 ? 1 : -1, speed: 11 + rnd() * 7, state: 'walk', cross: null, prog: 0, cool: 0, waitT: 0, x: p[0], z: p[1], h: p[2], color: Math.floor(rnd() * 8), phase: rnd() * 6 });
+        }
+      }
+      function robotNear(C, x, z, fx, fz, look) {
+        const R = C.robot;
+        if (!R || !R.active) return false;
+        // robotun gövdesine (iki daire) bir adım sonra 6 cm'den fazla yaklaşacaksa dur
+        const nx = x + fx * 4, nz = z + fz * 4;
+        const rf = Math.sin(R.h), rc = Math.cos(R.h);
+        // robotun hemen önündeyse durma, yürüyüp önünden çekil
+        const rlz = (x - R.x) * rf + (z - R.z) * rc, rlx = (x - R.x) * rc - (z - R.z) * rf;
+        if (Math.abs(R.v || 0) > 0.5 && rlz > 13 && Math.abs(rlx) < 16) return false;
+        for (const k of [-6, 0, 6]) {
+          const cx = R.x + rf * k, cz = R.z + rc * k;
+          const dn = Math.hypot(nx - cx, nz - cz), d0 = Math.hypot(x - cx, z - cz);
+          if (dn < 10 + 3.5 + 6 && dn < d0) return true;
+        }
+        const ex = R.x - x, ez = R.z - z;
+        const along = ex * fx + ez * fz;
+        if (along < 0 || along > look + 14) return false;
+        const lat = Math.abs(ex * fz - ez * fx);
+        return lat < 16;
+      }
+      function crossingClear(C, c) {
+        const mx = (c.A[0] + c.B[0]) / 2, mz = (c.A[1] + c.B[1]) / 2;
+        for (const k of C.cars) {
+          const d = Math.hypot(k.x - mx, k.z - mz);
+          if (d < 34) return false;
+          if (d < 80 && k.v > 3) return false;
+        }
+        const R = C.robot;
+        if (R && R.active && Math.hypot(R.x - mx, R.z - mz) < (R.park ? 70 : 220)) return false;
+        return true;
+      }
+      function updatePeds(C, dt) {
+        const rnd = C.rnd;
+        for (const p of C.peds) {
+          p.cool = Math.max(0, p.cool - dt);
+          if (p.state === 'walk') {
+            const L = p.loop;
+            const pos = loopPos(L, p.u);
+            const fx = Math.sin(pos[2]) * p.dir, fz = Math.cos(pos[2]) * p.dir;
+            if (robotNear(C, pos[0], pos[1], fx, fz, 6)) { p.moving = false; continue; }
+            const du = p.dir * p.speed * dt;
+            const u0 = ((p.u % L.len) + L.len) % L.len, u1 = u0 + du;
+            let hit = null;
+            if (p.cool <= 0) for (const ev of L.ev) {
+              const pass = p.dir > 0 ? (ev.u > u0 && ev.u <= u1) || (ev.u + L.len > u0 && ev.u + L.len <= u1) : (ev.u < u0 && ev.u >= u1) || (ev.u - L.len < u0 && ev.u - L.len >= u1);
+              if (pass) { hit = ev; break; }
+            }
+            if (hit && rnd() < 0.5) { p.state = 'wait'; p.cross = hit; p.u = hit.u; p.waitT = 0; }
+            else { p.u = u1; if (hit) p.cool = 2; }
+            const q = loopPos(L, p.u);
+            p.x = q[0]; p.z = q[1]; p.h = p.dir > 0 ? q[2] : q[2] + Math.PI;
+            p.moving = p.state === 'walk';
+          } else if (p.state === 'wait') {
+            p.waitT += dt;
+            const c = p.cross.c;
+            let ok;
+            if (c.kind === 'lit') { const L = lightState(c.node, 'P', C.t); ok = L.c === 'g' && L.rem >= c.len / p.speed + 0.6; }
+            else ok = crossingClear(C, c);
+            const from = p.cross.side === 0 ? c.A : c.B, to = p.cross.side === 0 ? c.B : c.A;
+            p.h = Math.atan2(to[0] - from[0], to[1] - from[1]);
+            p.moving = false;
+            if (ok) { p.state = 'cross'; p.prog = 0; }
+            else if (p.waitT > 45) { p.state = 'walk'; p.cool = 3; }
+          } else if (p.state === 'cross') {
+            const c = p.cross.c;
+            const from = p.cross.side === 0 ? c.A : c.B, to = p.cross.side === 0 ? c.B : c.A;
+            const fx = (to[0] - from[0]) / c.len, fz = (to[1] - from[1]) / c.len;
+            if (robotNear(C, p.x, p.z, fx, fz, 6) && p.prog < 8) { p.moving = false; continue; }
+            p.prog = Math.min(c.len, p.prog + p.speed * 1.15 * dt);
+            p.x = from[0] + fx * p.prog; p.z = from[1] + fz * p.prog; p.h = Math.atan2(fx, fz);
+            p.moving = true;
+            if (p.prog >= c.len) {
+              const other = c.ends[1 - p.cross.side];
+              p.loop = other.loop; p.u = other.u; p.dir = rnd() < 0.5 ? 1 : -1; p.state = 'walk'; p.cool = 3; p.cross = null;
+            }
+          }
+          p.phase += dt * (p.moving ? p.speed * 0.5 : 0);
+        }
+      }
+      // Park etmiş araçlar zamanla gelip gider (robotun yakınındakiler değişmez)
+      function updateParked(C, dt) {
+        C.changeT -= dt;
+        if (C.changeT > 0) return null;
+        C.changeT = 3 + C.rnd() * 4;
+        const R = C.robot;
+        const cand = C.parked.filter((b) => !R || Math.hypot(b.x0c - R.x, b.z0c - R.z) > 260);
+        if (!cand.length) return null;
+        const b = cand[Math.floor(C.rnd() * cand.length)];
+        b.active = !b.active;
+        return b;
+      }
+      function cityUpdate(C, dt) {
+        C.t += dt;
+        updateCars(C, dt);
+        updatePeds(C, dt);
+        return updateParked(C, dt);
+      }
+      // park kutularına merkez bilgisi
+      function cityPrep(C) { C.parked.forEach((b) => { b.x0c = (b.minX + b.maxX) / 2; b.z0c = (b.minZ + b.maxZ) / 2; }); }
+
+      // ---- Robotun hangi şeritte olduğu
+      function laneOfPose(C, x, z, h, needHeading) {
+        let best = null;
+        for (const l of C.lanes) {
+          const [lx, lz] = frameToL(l.F, x, z);
+          if (lz < -12 || lz > l.len + 12) continue;
+          const dh = Math.abs(wrapA(h - l.H));
+          if (Math.abs(lx) < 14 && (!needHeading || dh < 0.6)) {
+            const sc = Math.abs(lx) + dh * 10;
+            if (!best || sc < best.sc) best = { lane: l, s: lz, x: lx, sc };
+          }
+        }
+        return best;
+      }
+      // Rota: şeritten hedef şeride (Dijkstra), yalnız izinli bağlantılarla
+      function cityRoute(C, lane, s0, target, sT) {
+        if (lane === target && sT > s0 + 30) return [];
+        const exits = (l, sFrom) => l.taps.filter((t) => t.fromS > sFrom + 25).concat(l.outs);
+        const startSet = new Set(exits(lane, s0));
+        const dist = new Map(), prev = new Map(), entry = new Map();
+        const pq = [];
+        const relax = (c, d) => { const l = c.to; if (!dist.has(l) || d < dist.get(l)) { dist.set(l, d); prev.set(l, c); entry.set(l, c.toS); pq.push([d, l]); } };
+        startSet.forEach((c) => relax(c, (c.fromS - s0) + c.len));
+        let found = null;
+        while (pq.length) {
+          pq.sort((a, b) => a[0] - b[0]);
+          const [d, l] = pq.shift();
+          if (d > dist.get(l)) continue;
+          const es = entry.get(l);
+          if (l === target && sT > es + 30) { found = l; break; }
+          exits(l, es).forEach((c) => relax(c, d + (c.fromS - es) + c.len));
+        }
+        if (!found) return null;
+        const path = [];
+        let l = found, guard = 0;
+        while (guard++ < 200) { const c = prev.get(l); path.unshift(c); if (startSet.has(c)) break; l = c.from; }
+        return path;
+      }
+
+      // ---- Robotun şehirde sürüşü
+      //  Şeritte sağdaki park şeridini tarar (ilk uygun boşluğa paralel park) ya da seçilen otoparka gider.
+      //  Kırmızı ışıkta durur, öndeki aracı sensörle takip eder, kavşakta yeşilde geçer.
+      const R_CRUISE = 26, R_SCAN = 18, R_TURN = 18;
+      function localPose(F, P) { const [x, z] = frameToL(F, P.x, P.z); return { x, z, h: wrapA(P.h - F.H) }; }
+      function makeCityRobot(C, target, rndF) {
+        return { C, target, rnd: rndF || Math.random, state: null, mem: {}, steps: null, i: 0, frame: null, lane: null, conn: null, next: null, granted: false, status: '', done: false, error: null, dec: null, t: 0, v: 0, waitT: 0 };
+      }
+      function crLaneEnter(R, lane, s) {
+        R.state = 'lane'; R.lane = lane; R.frame = lane.F; R.conn = null; R.granted = false;
+        R.mem = {};
+        R.scanSt = { type: 'scan', speed: R_SCAN, endZ: 1e9, sides: 'right', early: 40, capF: () => R.cap };
+        R.next = crChooseNext(R, lane, s);
+      }
+      function crChooseNext(R, lane, s) {
+        const C = R.C;
+        if (R.target !== 'curb') {
+          const L = C.lots[R.target];
+          if (lane === L.lane && L.s > s + 20) return 'lot';
+          const path = cityRoute(C, lane, s, L.lane, L.s);
+          if (!path) { R.error = 'Otoparka giden yol bulunamadı'; return null; }
+          if (!path.length) return 'lot';
+          return path[0];
+        }
+        const opts = [];
+        lane.taps.forEach((t) => { if (t.fromS > s + 40) opts.push([t, 0.35]); });
+        lane.outs.forEach((o) => opts.push([o, o.type === 'straight' ? 0.55 : o.type === 'right' ? 0.35 : 0.3]));
+        const tot = opts.reduce((a, o) => a + o[1], 0);
+        let r = R.rnd() * tot;
+        for (const o of opts) { r -= o[1]; if (r <= 0) return o[0]; }
+        return opts.length ? opts[opts.length - 1][0] : null;
+      }
+      function cityRobotStart(R, P) {
+        const C = R.C;
+        for (const L of C.lots) {
+          const [lx, lz] = frameToL(L.F, P.x, P.z);
+          if (Math.abs(lx) < 132 && lz > -170 && lz < 132) {
+            R.lot = L; R.frame = L.F; R.mem = {}; R.i = 0;
+            const Pl = localPose(L.F, P);
+            if (R.target !== C.lots.indexOf(L)) {
+              // başka hedef: otoparktan caddeye çık
+              const pre = lz > -112 ? parkPlanAuto(1e9, Pl).filter((st) => st.type !== 'scan' && !(st.type === 'turn' && st.h === 0)) : [];
+              R.state = 'lotOut'; R.lane = L.lane;
+              R.steps = pre.concat([
+                { type: 'turn', h: Math.PI, label: 'Çıkışa dönülüyor' },
+                { type: 'line', h: Math.PI, px: 0, pz: 0, speed: 14, until: (Q) => Q.z <= -122, label: 'Otopark çıkışına gidiliyor' },
+                { type: 'waitPeds', label: 'Kaldırımdaki yayaların geçmesi bekleniyor' },
+                { type: 'waitTraffic', lane: L.lane, s: L.s, label: 'Caddeden araç gelmiyor mu? Bekleniyor' },
+                { type: 'line', h: Math.PI, px: 0, pz: 0, speed: 14, until: (Q) => Q.z <= -210, label: 'Caddeye çıkılıyor' },
+                { type: 'turn', h: Math.PI / 2, label: 'Şeride dönülüyor' }
+              ]);
+              return true;
+            }
+            R.state = 'lotPark';
+            R.steps = lz < -112 ? [{ type: 'turn', h: 0, label: 'Otopark koridoruna hizalanıyor' }, { type: 'line', h: 0, px: 0, pz: 0, speed: 14, until: (Q) => Q.z >= -112, label: 'Otoparka giriliyor' }].concat(parkPlanAuto(L.lot.scanEnd)) : parkPlanAuto(L.lot.scanEnd, Pl);
+            return true;
+          }
+        }
+        const ln = laneOfPose(C, P.x, P.z, P.h, true);
+        if (ln) { crLaneEnter(R, ln.lane, ln.s); return true; }
+        // kaldırımda park etmiş: önce yola çık
+        for (const l of C.lanes) {
+          if (l.li !== 0) continue;
+          const [lx, lz] = frameToL(l.F, P.x, P.z);
+          if (lx < -10 && lx > -44 && lz > 0 && lz < l.len) {
+            const Pl = localPose(l.F, P);
+            const pre = parkPlanAuto(1e9, Pl).filter((st) => st.type !== 'scan');
+            const k = pre.findIndex((st) => st.type === 'exitX');
+            if (k >= 0) pre.splice(k, 0, { type: 'waitTraffic', label: 'Yoldan araç gelmiyor mu? Bekleniyor' });
+            R.state = 'exitCurb'; R.lane = l; R.frame = l.F; R.steps = pre; R.i = 0; R.mem = {};
+            return true;
+          }
+        }
+        R.error = 'Robot bir yolda değil. Robotu bir şeride getirip tekrar deneyin';
+        return false;
+      }
+      function crTrafficClear(C, lane, s) {
+        for (const c of C.cars) {
+          if (c.edge === lane && c.s > s - 150 && c.s < s + 40) return false;
+          if (c.edge.kind === 'conn' && c.edge.to === lane && c.edge.toS < s + 40) return false;
+        }
+        return true;
+      }
+      function cityRobotTick(R, P, dt, son) {
+        const C = R.C;
+        R.t += dt;
+        if (R.error || R.done) return [0, 0];
+        const front = son('Ön');
+        const fc = Math.max(0, (front - 16) * 1.1);
+        if (R.state === 'lane') {
+          const Pl = localPose(R.frame, P);
+          const lane = R.lane;
+          if (!R.next) { R.next = crChooseNext(R, lane, Pl.z); if (!R.next) { R.error = R.error || 'Gidecek yol yok'; return [0, 0]; } }
+          let stopCap = Infinity;
+          let label;
+          if (R.next === 'lot') {
+            const L = C.lots[R.target];
+            const dz = L.s - Pl.z;
+            if (Math.abs(dz) < 0.6 && Math.abs(R.v) < 3) {
+              R.state = 'lotIn'; R.lot = L; R.frame = L.F; R.mem = {}; R.i = 0; R.v = 0;
+              R.steps = [
+                { type: 'turn', h: 0, label: 'Otopark girişine sağa dönülüyor' },
+                { type: 'waitPeds', label: 'Kaldırımdaki yayaların geçmesi bekleniyor' },
+                { type: 'line', h: 0, px: 0, pz: 0, speed: 14, until: (Q) => Q.z >= -112, label: 'Kaldırımdan geçip otoparka giriliyor' }
+              ].concat(parkPlanAuto(L.lot.scanEnd));
+              return [0, 0];
+            }
+            stopCap = dz > 0 ? Math.max(0, dz * 1.4) : 0;
+            if (dz < -0.6) { R.v = Math.max(-6, dz * 1.4); return [R.v, 0]; }
+            label = L.name + ' girişine yaklaşılıyor';
+          } else {
+            const conn = R.next;
+            const endZ = conn.fromS;
+            const atLine = conn.fromS >= lane.len - 0.5;
+            if (!R.granted && endZ - Pl.z < 70) R.granted = permit(C, conn, null, conn.type === 'straight' ? R_CRUISE : R_TURN);
+            if (!R.granted) stopCap = Math.max(0, ((atLine ? endZ - 13 : endZ - 2) - Pl.z) * 1.5);
+            if (R.granted && Pl.z >= endZ - 1) { R.state = 'conn'; R.conn = conn; R.prog = Math.max(0, Pl.z - endZ); R.mem = {}; return [R.v, 0]; }
+            if (!R.granted && endZ - Pl.z < 70) {
+              if (conn.ctrl === 'light') { const Ls = lightState(conn.node, connKey(conn), C.t); label = Ls.c === 'g' ? 'Kavşak dolu, bekleniyor' : (Ls.c === 'y' ? 'Sarı ışık: duruluyor' : 'Kırmızı ışıkta bekliyor'); }
+              else if (conn.ctrl === 'merge') label = 'Ana yola çıkmak için boşluk bekleniyor';
+              else label = 'Dönüş için yol bekleniyor';
+            }
+          }
+          R.cap = Math.min(stopCap, fc);
+          if (!label && fc < 8) label = 'Öndeki araç: takip mesafesi korunuyor';
+          if (R.target === 'curb') {
+            const out = runParkStep(R.scanSt, Pl, dt, son, R.mem);
+            if (out[2] && R.mem.decision) {
+              R.dec = R.mem.decision; R.state = 'man'; R.steps = maneuverSteps(R.dec); R.i = 0; R.v = 0;
+              return [0, 0];
+            }
+            R.v = out[0];
+            R.status = label || 'Şeritte ilerliyor, sağdaki park şeridi ölçülüyor';
+            return [out[0], out[1]];
+          }
+          const e = Pl.x, corr = clampN(0.08 * e, 0.35);
+          const w = clampN(3 * wrapA(-corr - Pl.h), 1.0);
+          const v = Math.min(R_CRUISE, R.cap, Math.max(R.v, 4) + 40 * dt);
+          R.v = v < 0.5 ? 0 : v;
+          R.status = label || (C.lots[R.target].name + ' yönünde ilerleniyor');
+          return [R.v, w];
+        }
+        if (R.state === 'conn') {
+          const c = R.conn;
+          // en yakın noktayı ileriye doğru ara
+          let bestS = R.prog, bestD = Infinity;
+          for (let s = Math.max(0, R.prog - 4); s <= Math.min(c.len, R.prog + 30); s += 1) {
+            const p = polyAt(c, s);
+            const d = (p[0] - P.x) * (p[0] - P.x) + (p[1] - P.z) * (p[1] - P.z);
+            if (d < bestD) { bestD = d; bestS = s; }
+          }
+          R.prog = bestS;
+          if (R.prog >= c.len - 1.5) { crLaneEnter(R, c.to, c.toS + 1); return [R.v, 0]; }
+          const Ld = 12;
+          const tp = polyAt(c, R.prog + Ld);
+          const alpha = wrapA(Math.atan2(tp[0] - P.x, tp[1] - P.z) - P.h);
+          const vmax = c.type === 'straight' ? R_CRUISE : R_TURN;
+          let v = Math.min(vmax, fc, Math.max(R.v, 4) + 40 * dt);
+          if (Math.abs(alpha) > 0.6) v = Math.min(v, 6);
+          R.v = v < 0.5 ? 0 : v;
+          const w = clampN(2 * Math.sin(alpha) * Math.max(R.v, 8) / Ld, 2.0);
+          R.status = fc < 8 ? 'Kavşakta: öndeki araç bekleniyor' : c.type === 'straight' ? 'Kavşaktan düz geçiliyor' : c.type === 'right' ? 'Sağa dönülüyor' : 'Sola dönülüyor';
+          return [R.v, w];
+        }
+        // Manevralar: park motoru yerel çerçevede
+        const Pl = localPose(R.frame, P);
+        const st = R.steps[R.i];
+        if (!st) { R.done = true; return [0, 0]; }
+        if (st.type === 'waitPeds') {
+          R.status = st.label;
+          const near = C.peds.some((p) => { const [lx, lz] = frameToL(R.frame, p.x, p.z); return Math.abs(lx) < 60 && lz > -175 && lz < -120; });
+          if (!near) { st.t = (st.t || 0) + dt; if (st.t > 0.5) R.i++; } else st.t = 0;
+          return [0, 0];
+        }
+        if (st.type === 'waitTraffic') {
+          R.status = st.label;
+          if (crTrafficClear(C, st.lane || R.lane, st.lane ? st.s : Pl.z)) { st.t = (st.t || 0) + dt; if (st.t > 1) R.i++; } else st.t = 0;
+          return [0, 0];
+        }
+        const out = runParkStepSafe(st, Pl, dt, son, R.mem);
+        R.status = (R.mem.pause ? '⏸ Engel: bekleniyor · ' : '') + st.label;
+        if (R.mem.error) { R.error = R.mem.error; return [0, 0]; }
+        if ((st.t || 0) > 60 && !R.mem.pause) { R.error = 'Manevra zaman aşımına uğradı'; return [0, 0]; }
+        if (out[2]) {
+          if (R.mem.decision && !R.dec) { R.dec = R.mem.decision; R.steps = R.steps.concat(maneuverSteps(R.dec)); }
+          R.i++;
+          if (R.i >= R.steps.length) {
+            if (R.state === 'exitCurb') { crLaneEnter(R, R.lane, Pl.z); return [0, 0]; }
+            if (R.state === 'lotOut') { const L = R.lot; R.lot = null; R.dec = null; crLaneEnter(R, L.lane, L.s); return [0, 0]; }
+            R.done = true;
+          }
+          R.v = 0;
+          return [0, 0];
+        }
+        R.v = out[0];
+        return [out[0], out[1]];
+      }
+      // Robotun trafikteki yeri (diğer araçlar ve yayalar bunu görür)
+      function cityRobotAgent(C, R, P, v) {
+        const A = C.robot || (C.robot = {});
+        A.active = true; A.x = P.x; A.z = P.z; A.h = P.h; A.v = v;
+        A.conn = R && R.state === 'conn' ? R.conn : null;
+        A.park = !!R && R.state !== 'lane' && R.state !== 'conn' && !R.done;
+        const ln = laneOfPose(C, P.x, P.z, P.h, false);
+        A.lane = ln ? ln.lane : null;
+        A.s = ln ? ln.s : 0;
       }
 
 
@@ -2161,7 +3302,7 @@
         road.position.set(14, 0.02, zc);
         road.receiveShadow = true;
         lotScene.add(road);
-        sceneBox(30, 10, L, MAT.walk, -61, 5, zc);                 // sağ kaldırım (yüksek)
+        sceneBox(30, 10, L, MAT.walk, -63, 5, zc);                 // sağ kaldırım (yüksek)
         sceneBox(24, 14, L, MAT.walk, 84, 7, zc);                  // sol yaya yolu (dükkân önü)
         // Şerit çizgileri: kesikli orta çizgi, park şeridi sarı çizgisi, dikey cep çizgileri
         for (let z = Z0 + 10; z < Z1 - 10; z += 26) paint(16, z, 1.1, 13);
@@ -2187,9 +3328,9 @@
         // Sağ kaldırımda ağaçlar ve sokak lambaları
         for (let z = Z0 + 40; z < Z1 - 20; z += 62 + rnd() * 20) {
           if (cw.some((c) => z > c.z0 - 10 && z < c.z1 + 10)) continue;
-          tree(-62, z, 10, 0.85 + rnd() * 0.35);
+          tree(-64, z, 10, 0.85 + rnd() * 0.35);
         }
-        for (let z = Z0 + 70; z < Z1 - 20; z += 140) streetLamp(-50, z, 10, 1);
+        for (let z = Z0 + 70; z < Z1 - 20; z += 140) streetLamp(-52, z, 10, 1);
         for (let z = Z0 + 140; z < Z1 - 20; z += 140) streetLamp(78, z, 14, -1);
         // Binalar: solda dükkân sırası, sağda apartmanlar
         for (let z = Z0; z < Z1; ) {
@@ -2201,16 +3342,378 @@
         for (let z = Z0; z < Z1; ) {
           const d = 50 + rnd() * 80;
           const z2 = Math.min(Z1, z + d);
-          building(-76, -128, z, z2 - 2, 40 + rnd() * 70, FACADES[Math.floor(rnd() * FACADES.length)]);
+          building(-78, -128, z, z2 - 2, 40 + rnd() * 70, FACADES[Math.floor(rnd() * FACADES.length)]);
           z = z2;
         }
         building(-128, 128, Z1 + 4, Z1 + 30, 70, 0xe5e0d5);         // caddenin sonundaki bina
-        signBoard('PARK CADDESİ', -40, -108, 10, 0);
+        signBoard('PARK CADDESİ', -56, -108, 10, 0);
         signBoard('P  OTOPARK', 74, -40, 14, 0);
         paint(-12, -112, 1.2, 24);
         paint(12, -112, 1.2, 24);
         groundLabel('BAŞLANGIÇ', 0, -97, 22, 4.5, false, '#e2e8f0');
       }
+
+      // ---------------- ŞEHİR SAHNESİ (çizim) ----------------
+      let city = null;
+      let cityBot = null;
+      let cityVis = null;
+      let simSpeed = 1;
+      const cityGroup = new THREE.Group();
+      PG.add(cityGroup);
+      const cityMats = {
+        asphalt: new THREE.MeshStandardMaterial({ color: 0x5f6772, roughness: 0.95 }),
+        lotAsphalt: new THREE.MeshStandardMaterial({ color: 0x7d8693, roughness: 0.95 }),
+        walk: new THREE.MeshStandardMaterial({ color: 0xd6d2ca, roughness: 0.9 }),
+        bulb: new THREE.MeshStandardMaterial({ color: 0xcfcac0, roughness: 0.9 }),
+        grass: new THREE.MeshStandardMaterial({ color: 0x5b9445, roughness: 0.95 }),
+        roof: new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.9 }),
+        wall: new THREE.MeshStandardMaterial({ color: 0x8b8f98, roughness: 0.8 }),
+        curb: new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.7 }),
+        bin: new THREE.MeshStandardMaterial({ color: 0x4d7c0f, roughness: 0.7 }),
+        lamp: { r: new THREE.Color(0xef4444), y: new THREE.Color(0xfbbf24), g: new THREE.Color(0x22c55e), off: new THREE.Color(0x1f2937) },
+        housing: new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.6 }),
+        pedPants: new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 }),
+        skin: new THREE.MeshStandardMaterial({ color: 0xe0b48f, roughness: 0.8 })
+      };
+      const facadeMats = FACADES.map((col) => {
+        const m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.85, map: facadeTex.clone() });
+        m.map.needsUpdate = true;
+        m.map.repeat.set(4, 4);
+        return m;
+      });
+      const PED_COLORS = [0xef4444, 0x2563eb, 0x16a34a, 0xf59e0b, 0x9333ea, 0x0d9488, 0xdb2777, 0x475569];
+
+      function cityBox(r, y0, h, mat, parent) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(r.x1 - r.x0, h, r.z1 - r.z0), mat);
+        m.position.set((r.x0 + r.x1) / 2, y0 + h / 2, (r.z0 + r.z1) / 2);
+        m.receiveShadow = true;
+        (parent || cityGroup).add(m);
+        return m;
+      }
+      // Yer çizgilerini tek geometride topla (binlerce küçük şerit tek çizimde)
+      function quadBatch(rects, color, y, opacity) {
+        const pos = [], idx = [];
+        rects.forEach((q) => {
+          const k = pos.length / 3;
+          const pts = q.pts || [[q.x0, q.z0], [q.x1, q.z0], [q.x1, q.z1], [q.x0, q.z1]];
+          pts.forEach((p) => pos.push(p[0], y, p[1]));
+          idx.push(k, k + 2, k + 1, k, k + 3, k + 2);
+        });
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setIndex(idx);
+        g.computeVertexNormals();
+        const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity, side: THREE.DoubleSide, depthWrite: false }));
+        m.renderOrder = 1;
+        cityGroup.add(m);
+        return m;
+      }
+      // Yerel çerçevede dönmüş bir dikdörtgenin 4 köşesi
+      const fQuad = (F, x0, x1, z0, z1) => ({ pts: [frameToW(F, x0, z0), frameToW(F, x1, z0), frameToW(F, x1, z1), frameToW(F, x0, z1)] });
+      function textCanvasTex(text, bg, fg, w, h) {
+        const c = document.createElement('canvas');
+        c.width = w || 512; c.height = h || 128;
+        const g = c.getContext('2d');
+        g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
+        g.strokeStyle = fg; g.lineWidth = 8; g.strokeRect(8, 8, c.width - 16, c.height - 16);
+        g.fillStyle = fg;
+        let fs = Math.round(c.height * 0.5);
+        g.font = '800 ' + fs + 'px Inter, Arial, sans-serif';
+        while (g.measureText(text).width > c.width - 40 && fs > 12) { fs -= 2; g.font = '800 ' + fs + 'px Inter, Arial, sans-serif'; }
+        g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(text, c.width / 2, c.height / 2 + 3);
+        const t = new THREE.CanvasTexture(c);
+        t.encoding = THREE.sRGBEncoding;
+        return t;
+      }
+      function cityBoard(text, x, z, rotY, bg, w, poleH) {
+        poleH = poleH || 26;
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, poleH, 8), MAT.pole);
+        pole.position.set(x, 3 + poleH / 2, z);
+        cityGroup.add(pole);
+        const b = new THREE.Mesh(new THREE.PlaneGeometry(w || 26, (w || 26) / 4), new THREE.MeshBasicMaterial({ map: textCanvasTex(text, bg, '#ffffff'), side: THREE.DoubleSide }));
+        b.position.set(x, 3 + poleH, z);
+        b.rotation.y = rotY;
+        cityGroup.add(b);
+      }
+
+      function buildCityScene(C) {
+        while (cityGroup.children.length) {
+          const o = cityGroup.children.pop();
+          o.traverse && o.traverse((q) => { if (q.geometry) q.geometry.dispose(); });
+        }
+        const O = C.outer;
+        // zemin: tüm yollar asfalt
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(O.x1 - O.x0 + 900, O.z1 - O.z0 + 900), cityMats.asphalt);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = 0.01;
+        ground.receiveShadow = true;
+        cityGroup.add(ground);
+        // kaldırımlar ve blok içleri (yüksek), dış çevre çimli
+        C.boxes.filter((b) => b.kind === 'walk').forEach((b) => cityBox({ x0: b.minX, x1: b.maxX, z0: b.minZ, z1: b.maxZ }, 0, 3, b.outer ? cityMats.walk : cityMats.walk));
+        C.blocks.forEach((b) => {
+          // blok içi çim (kaldırım halkasının içi)
+          const r = { x0: b.x0 + SIDEWALK, x1: b.x1 - SIDEWALK, z0: b.z0 + SIDEWALK, z1: b.z1 - SIDEWALK };
+          let rs = [r];
+          if (b.lot) { const lr = b.lot.rect; rs = rectSub(r, { x0: lr.x0 - 2, x1: lr.x1 + 2, z0: lr.z0 - 2, z1: lr.z1 + 2 }); }
+          rs.forEach((q) => { const g = new THREE.Mesh(new THREE.PlaneGeometry(q.x1 - q.x0, q.z1 - q.z0), cityMats.grass); g.rotation.x = -Math.PI / 2; g.position.set((q.x0 + q.x1) / 2, 3.05, (q.z0 + q.z1) / 2); cityGroup.add(g); });
+        });
+        // kaldırım çıkıntıları (yaya geçitleri, sokak ağızları, otopark girişleri)
+        const bulbGeo = new THREE.BoxGeometry(1, 3, 1);
+        const bulbs = new THREE.InstancedMesh(bulbGeo, cityMats.bulb, C.bulbs.length);
+        const mtx = new THREE.Matrix4();
+        C.bulbs.forEach((b, i) => { mtx.makeScale(b.maxX - b.minX, 1, b.maxZ - b.minZ); mtx.setPosition((b.minX + b.maxX) / 2, 1.5, (b.minZ + b.maxZ) / 2); bulbs.setMatrixAt(i, mtx); });
+        bulbs.receiveShadow = true;
+        cityGroup.add(bulbs);
+
+        // ---- Çizgiler
+        const white = [], yellow = [], zebra = [];
+        const lanesByRoad = new Map();
+        C.lanes.forEach((l) => { if (!lanesByRoad.has(l.road)) lanesByRoad.set(l.road, []); lanesByRoad.get(l.road).push(l); });
+        C.lanes.forEach((l) => {
+          const F = l.F;
+          const twoWay = !l.road.oneway;
+          // orta çizgi (yalnız +yönlü şeritlerden çiz: iki kez çizilmesin)
+          if (twoWay && l.dir > 0 && l.li === 0) {
+            const ax = l.off;   // yerel x = sola: eksen solda
+            if (l.road.kind === 'bulvar') { yellow.push(fQuad(F, ax - 2.2, ax - 0.8, 0, l.len)); yellow.push(fQuad(F, ax + 0.8, ax + 2.2, 0, l.len)); }
+            else for (let z = 6; z < l.len - 6; z += 26) white.push(fQuad(F, ax - 0.6, ax + 0.6, z, Math.min(l.len - 6, z + 13)));
+          }
+          // bulvarda şerit ayırıcı (kesikli)
+          if (l.road.kind === 'bulvar' && l.li === 0) for (let z = 6; z < l.len - 6; z += 22) white.push(fQuad(F, 15.4, 16.6, z, Math.min(l.len - 6, z + 11)));
+          // park şeridi çizgisi
+          if (l.li === 0) {
+            white.push(fQuad(F, -16.5, -15.5, 24, l.len - 24));
+            if (l.road.kind === 'sokak') white.push(fQuad(F, 15.5, 16.5, 24, l.len - 24));
+          }
+          // dur çizgisi
+          if (l.nodeB && l.nodeB.lit && l.li === 0) white.push(fQuad(F, -l.road.hw + l.off, l.off, l.len - 2.5, l.len));
+          if (l.road.kind === 'sokak') white.push(fQuad(F, -44, 44, l.len - 2.5, l.len));
+        });
+        C.crossings.forEach((c) => {
+          const dx = (c.B[0] - c.A[0]) / c.len, dz = (c.B[1] - c.A[1]) / c.len;
+          const px = -dz, pz = dx;
+          for (let d = 19; d < c.len - 19; d += 6.5) {
+            const cx = c.A[0] + dx * d, cz = c.A[1] + dz * d;
+            const a = 1.8, b = 11;
+            zebra.push({ pts: [[cx - dx * a - px * b, cz - dz * a - pz * b], [cx + dx * a - px * b, cz + dz * a - pz * b], [cx + dx * a + px * b, cz + dz * a + pz * b], [cx - dx * a + px * b, cz - dz * a + pz * b]] });
+          }
+        });
+        // otopark çizgileri
+        C.lots.forEach((L) => {
+          const F = L.F;
+          for (let z = -60; z <= 90; z += 30) white.push(fQuad(F, 32, 68, z - 0.6, z + 0.6));
+          white.push(fQuad(F, 31.4, 32.6, -60.6, 90.6));
+          yellow.push(fQuad(F, -16.45, -15.55, -125, 125));
+          const pl = new THREE.Mesh(new THREE.PlaneGeometry(L.rect.x1 - L.rect.x0, L.rect.z1 - L.rect.z0), cityMats.lotAsphalt);
+          pl.rotation.x = -Math.PI / 2;
+          pl.position.set((L.rect.x0 + L.rect.x1) / 2, 0.03, (L.rect.z0 + L.rect.z1) / 2);
+          pl.receiveShadow = true;
+          cityGroup.add(pl);
+          // otopark iç yapıları
+          L.boxes.forEach((b) => {
+            const k = b.local.kind;
+            if (k === 'car') return;
+            const mat = k === 'curb' ? cityMats.curb : k === 'bin' ? cityMats.bin : k === 'bound' ? cityMats.wall : k === 'wall' ? cityMats.wall : cityMats.bulb;
+            cityBox({ x0: b.minX, x1: b.maxX, z0: b.minZ, z1: b.maxZ }, 0, b.h, mat);
+          });
+          // büyük P / H işareti otopark zemininde
+          const sym = L.kind === 'hastane' ? 'H' : 'P';
+          const tex = textCanvasTex(sym, L.kind === 'hastane' ? '#dc2626' : '#1d4ed8', '#ffffff', 128, 128);
+          const gp = frameToW(F, -2, -60);
+          const sq = new THREE.Mesh(new THREE.PlaneGeometry(22, 22), new THREE.MeshBasicMaterial({ map: tex }));
+          sq.rotation.x = -Math.PI / 2; sq.rotation.z = F.H + Math.PI;
+          sq.position.set(gp[0], 0.08, gp[1]);
+          cityGroup.add(sq);
+        });
+        quadBatch(white, 0xffffff, 0.06, 0.9);
+        quadBatch(yellow, 0xfacc15, 0.06, 0.95);
+        quadBatch(zebra, 0xf8fafc, 0.07, 0.95);
+
+        // ---- Binalar
+        C.buildings.forEach((b) => {
+          const w = b.x1 - b.x0, d = b.z1 - b.z0;
+          if (b.kind === 'hastane') {
+            const wm = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.6, map: facadeTex.clone() });
+            wm.map.needsUpdate = true; wm.map.repeat.set(Math.max(2, Math.round(w / 20)), 4);
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, b.h, d), [wm, wm, cityMats.roof, cityMats.roof, wm, wm]);
+            m.position.set((b.x0 + b.x1) / 2, 3 + b.h / 2, (b.z0 + b.z1) / 2);
+            m.castShadow = false;
+            cityGroup.add(m);
+            // kırmızı haç (dört cephede) ve çatı yazısı
+            const crossTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#dc2626'; g.fillRect(44, 12, 40, 104); g.fillRect(12, 44, 104, 40); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; })();
+            const cm = new THREE.MeshBasicMaterial({ map: crossTex });
+            [[0, d / 2 + 0.3, 0], [0, -d / 2 - 0.3, Math.PI], [w / 2 + 0.3, 0, Math.PI / 2], [-w / 2 - 0.3, 0, -Math.PI / 2]].forEach(([ox, oz, ry]) => {
+              const p = new THREE.Mesh(new THREE.PlaneGeometry(22, 22), cm);
+              p.position.set((b.x0 + b.x1) / 2 + ox, 3 + b.h - 16, (b.z0 + b.z1) / 2 + oz);
+              p.rotation.y = ry;
+              cityGroup.add(p);
+            });
+            const roofSign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(w, d) * 0.8, Math.min(w, d) * 0.2), new THREE.MeshBasicMaterial({ map: textCanvasTex('HASTANE', '#dc2626', '#ffffff') }));
+            roofSign.rotation.x = -Math.PI / 2;
+            roofSign.position.set((b.x0 + b.x1) / 2, 3 + b.h + 0.2, (b.z0 + b.z1) / 2);
+            cityGroup.add(roofSign);
+          } else {
+            const fm = facadeMats[b.color % facadeMats.length];
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w, b.h, d), [fm, fm, cityMats.roof, cityMats.roof, fm, fm]);
+            m.position.set((b.x0 + b.x1) / 2, 3 + b.h / 2, (b.z0 + b.z1) / 2);
+            cityGroup.add(m);
+          }
+        });
+
+        // ---- Ağaçlar (instanced)
+        const trunkI = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.9, 1.3, 16, 6), MAT.trunk, C.trees.length);
+        const crownI = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(8, 0), MAT.leaf, C.trees.length);
+        C.trees.forEach(([x, z, s], i) => {
+          mtx.makeScale(s, s, s); mtx.setPosition(x, 3 + 8 * s, z); trunkI.setMatrixAt(i, mtx);
+          mtx.makeScale(s, s * 1.1, s); mtx.setPosition(x, 3 + 21 * s, z); crownI.setMatrixAt(i, mtx);
+        });
+        cityGroup.add(trunkI, crownI);
+
+        // ---- Park etmiş araçlar (yol kenarı + otopark içi), instanced
+        const lotCars = [];
+        C.lots.forEach((L) => L.boxes.forEach((b) => { if (b.local.kind === 'car') lotCars.push(b); }));
+        const allCars = C.parked.concat(lotCars);
+        const bodyI = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.45, metalness: 0.15 }), allCars.length);
+        const cabI = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), glassMat, allCars.length);
+        const col = new THREE.Color();
+        const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), sc = new THREE.Vector3(), ps = new THREE.Vector3();
+        const setCar = (b, i, on) => {
+          const w = b.maxX - b.minX, d = b.maxZ - b.minZ;
+          const alongZ = d >= w;
+          const len = Math.max(w, d), wid = Math.min(w, d);
+          const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+          q.setFromAxisAngle(up, alongZ ? 0 : Math.PI / 2);
+          sc.set(on ? wid : 0, on ? 8 : 0, on ? len : 0); ps.set(cx, 6, cz);
+          mtx.compose(ps, q, sc); bodyI.setMatrixAt(i, mtx);
+          sc.set(on ? wid - 3 : 0, on ? 5 : 0, on ? len * 0.52 : 0); ps.set(cx, 12.5, cz);
+          mtx.compose(ps, q, sc); cabI.setMatrixAt(i, mtx);
+        };
+        allCars.forEach((b, i) => { setCar(b, i, b.active); col.setHex(CAR_COLORS[(b.color !== undefined ? b.color : i) % CAR_COLORS.length]); bodyI.setColorAt(i, col); });
+        bodyI.castShadow = true;
+        cityGroup.add(bodyI, cabI);
+
+        // ---- Trafik ışıkları
+        const lights = C.lights.map((L) => {
+          const g = new THREE.Group();
+          g.position.set(L.x, 3, L.z);
+          g.rotation.y = L.faceH;
+          const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 30, 8), MAT.pole);
+          pole.position.y = 15;
+          g.add(pole);
+          const box = new THREE.Mesh(new THREE.BoxGeometry(4, 11, 3), cityMats.housing);
+          box.position.set(0, 31, 0);
+          g.add(box);
+          const lamps = ['r', 'y', 'g'].map((k, i) => {
+            const m = new THREE.Mesh(new THREE.CircleGeometry(1.3, 16), new THREE.MeshBasicMaterial({ color: cityMats.lamp.off }));
+            m.position.set(0, 34.5 - i * 3.5, 1.55);
+            g.add(m);
+            return m;
+          });
+          cityGroup.add(g);
+          return { L, lamps, last: '' };
+        });
+
+        // ---- Tabelalar
+        C.signs.forEach((s) => {
+          if (s.kind === 'road') cityBoard(s.text, s.x, s.z, s.h, '#1d4ed8', 30, 22);
+          else cityBoard(s.text, s.x, s.z, s.h, s.kind === 'hastane' ? '#dc2626' : '#1d4ed8', 34, 26);
+        });
+
+        // ---- Hareketli araçlar
+        const carMeshes = C.cars.map((c) => {
+          const g = new THREE.Group();
+          const body = new THREE.Mesh(new THREE.BoxGeometry(CAR_W, 8, CAR_L), new THREE.MeshStandardMaterial({ color: CAR_COLORS[c.color % CAR_COLORS.length], roughness: 0.45, metalness: 0.15 }));
+          body.position.y = 6;
+          body.castShadow = true;
+          g.add(body);
+          const cab = new THREE.Mesh(new THREE.BoxGeometry(15, 5, 12), glassMat);
+          cab.position.set(0, 12.5, -1);
+          g.add(cab);
+          [7.2, -7.2].forEach((wz) => {
+            const t = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 19, 12), tireMat);
+            t.rotation.z = Math.PI / 2;
+            t.position.set(0, 2.6, wz);
+            g.add(t);
+          });
+          const tail = new THREE.Mesh(new THREE.BoxGeometry(14, 1.4, 0.4), tailMat.clone());
+          tail.position.set(0, 7.5, -11.6);
+          g.add(tail);
+          g.userData.tails = [tail];
+          cityGroup.add(g);
+          return g;
+        });
+
+        // ---- Yayalar (instanced gövde + baş + bacaklar)
+        const n = C.peds.length;
+        const torsoI = new THREE.InstancedMesh(new THREE.CylinderGeometry(2.0, 2.3, 7, 8), new THREE.MeshStandardMaterial({ roughness: 0.8 }), n);
+        const headI = new THREE.InstancedMesh(new THREE.SphereGeometry(1.7, 10, 8), cityMats.skin, n);
+        const legI = new THREE.InstancedMesh(new THREE.BoxGeometry(1.3, 5, 1.3), cityMats.pedPants, n * 2);
+        C.peds.forEach((p, i) => { col.setHex(PED_COLORS[p.color % PED_COLORS.length]); torsoI.setColorAt(i, col); });
+        torsoI.castShadow = true;
+        cityGroup.add(torsoI, headI, legI);
+
+        cityVis = { C, bodyI, cabI, allCars, setCar, lights, carMeshes, torsoI, headI, legI };
+        syncCity(true);
+      }
+
+      const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _up = new THREE.Vector3(0, 1, 0), _e = new THREE.Euler();
+      function syncCity(all) {
+        if (!cityVis || !city) return;
+        const V = cityVis, C = city;
+        // ışıklar
+        V.lights.forEach((o) => {
+          const st = lightState(o.L.node, o.L.key, C.t).c;
+          if (st === o.last) return;
+          o.last = st;
+          o.lamps[0].material.color.copy(st === 'r' ? cityMats.lamp.r : cityMats.lamp.off);
+          o.lamps[1].material.color.copy(st === 'y' ? cityMats.lamp.y : cityMats.lamp.off);
+          o.lamps[2].material.color.copy(st === 'g' ? cityMats.lamp.g : cityMats.lamp.off);
+        });
+        // araçlar
+        C.cars.forEach((c, i) => {
+          const g = V.carMeshes[i];
+          g.position.set(c.x, 0, c.z);
+          g.rotation.y = c.h;
+          const brake = c.v < 4;
+          g.userData.tails.forEach((t) => { t.material.emissiveIntensity = brake ? 1.2 : 0.3; });
+        });
+        // yayalar
+        C.peds.forEach((p, i) => {
+          const bob = p.moving ? Math.abs(Math.sin(p.phase)) * 0.5 : 0;
+          _q.setFromAxisAngle(_up, p.h);
+          _p.set(p.x, 3 + 5 + 3.5 + bob, p.z); _s.set(1, 1, 1);
+          _m4.compose(_p, _q, _s); V.torsoI.setMatrixAt(i, _m4);
+          _p.set(p.x, 3 + 5 + 7 + 1.9 + bob, p.z);
+          _m4.compose(_p, _q, _s); V.headI.setMatrixAt(i, _m4);
+          const sw = p.moving ? Math.sin(p.phase) * 0.6 : 0;
+          [-1, 1].forEach((sd, k) => {
+            _e.set(sd * sw, p.h, 0, 'YXZ');
+            _q.setFromEuler(_e);
+            const ox = Math.cos(p.h) * sd * 1.1, oz = -Math.sin(p.h) * sd * 1.1;
+            _p.set(p.x + ox, 3 + 2.5 + bob, p.z + oz);
+            _m4.compose(_p, _q, _s); V.legI.setMatrixAt(i * 2 + k, _m4);
+          });
+        });
+        V.torsoI.instanceMatrix.needsUpdate = true;
+        V.headI.instanceMatrix.needsUpdate = true;
+        V.legI.instanceMatrix.needsUpdate = true;
+        if (all) {
+          V.allCars.forEach((b, i) => V.setCar(b, i, b.active));
+          V.bodyI.instanceMatrix.needsUpdate = true;
+          V.cabI.instanceMatrix.needsUpdate = true;
+          if (V.bodyI.instanceColor) V.bodyI.instanceColor.needsUpdate = true;
+        }
+      }
+      function cityParkedChanged(b) {
+        if (!cityVis) return;
+        const i = cityVis.allCars.indexOf(b);
+        if (i < 0) return;
+        cityVis.setCar(b, i, b.active);
+        cityVis.bodyI.instanceMatrix.needsUpdate = true;
+        cityVis.cabI.instanceMatrix.needsUpdate = true;
+      }
+      const cityMode = () => !!city && currentLayout === 'park' && currentMap === 'sehir';
 
       function buildLot(seed, kind) {
         kind = kind || currentMap;
@@ -2218,6 +3721,21 @@
         while (lotScene.children.length) lotScene.remove(lotScene.children[0]);
         LAYOUTS.park.meshes = parkBaseMeshes.slice();
         LAYOUTS.park.boxes = parkBaseBoxes.slice();
+        if (kind === 'sehir') {
+          city = makeCity(seed);
+          cityBot = null;
+          buildCityScene(city);
+          cityGroup.visible = true;
+          scene.fog = new THREE.Fog(0xe8eef4, 700, 2600);
+          camera.far = 4200;
+          camera.updateProjectionMatrix();
+          currentLot = { kind: 'sehir', scanEnd: 1e9 };
+          return currentLot;
+        }
+        city = null; cityBot = null; cityVis = null;
+        while (cityGroup.children.length) cityGroup.remove(cityGroup.children[0]);
+        camera.far = 700;
+        camera.updateProjectionMatrix();
         const lot = makeLot(seed, kind);
         const rnd = mulberry32(seed + 7);
         const street = kind === 'cadde';
@@ -2248,7 +3766,7 @@
         LAYOUTS.free.group.visible = k === 'free';
         LAYOUTS.park.group.visible = k === 'park';
         floorGrid.visible = k === 'free';
-        scene.fog = (k === 'park' && currentMap === 'cadde') ? new THREE.Fog(0xeef2f6, 260, 820) : null;
+        scene.fog = (k === 'park' && currentMap === 'cadde') ? new THREE.Fog(0xeef2f6, 260, 820) : (k === 'park' && currentMap === 'sehir') ? new THREE.Fog(0xe8eef4, 700, 2600) : null;
         obstacleMeshes.length = 0;
         obstacleBoxes.length = 0;
         LAYOUTS[k].meshes.forEach((m) => obstacleMeshes.push(m));
@@ -2588,9 +4106,9 @@
       // Araçtaki yerlerine göre: üst satır ön, alt satır arka
       const HUD_LAYOUT = ['Sol ön', 'Ön', 'Sağ ön', 'Sol arka', 'Arka', 'Sağ arka'];
       document.getElementById('hud-sonars').innerHTML = HUD_LAYOUT.map((n) => {
-        if (!n) return '<div></div>';
+        if (!n) return '<span></span>';
         const i = sonarUnits.findIndex((u) => u.name === n);
-        return '<div class="whitespace-nowrap"><span class="text-slate-400">' + HUD_SHORT[n] + '</span> <b id="hud-s' + i + '" class="text-slate-800">—</b></div>';
+        return '<span class="whitespace-nowrap"><span class="text-slate-400">' + HUD_SHORT[n] + '</span> <b id="hud-s' + i + '" class="text-slate-800">—</b></span>';
       }).join('');
       const hudCells = sonarUnits.map((u, i) => document.getElementById('hud-s' + i));
       const hudMode = document.getElementById('hud-mode');
@@ -2651,7 +4169,7 @@
       btnSound.addEventListener('click', () => {
         soundOn = !soundOn;
         ensureAudio();
-        btnSound.textContent = 'Buzzer sesi: ' + (soundOn ? 'Açık' : 'Kapalı');
+        btnSound.textContent = 'Ses: ' + (soundOn ? 'Açık' : 'Kapalı');
         setBuzz(buzzState);
       });
 
@@ -2680,6 +4198,8 @@
 
       function setDriveMode(v) {
         driveMode = v;
+        document.body.classList.toggle('driving', v);
+        document.getElementById('sensor-widget').classList.toggle('hidden', !v);
         worldGroup.visible = v;
         driveHud.classList.toggle('hidden', !v);
         labelDriveMode.textContent = v ? 'Modeli İncele' : 'Park Simülasyonu';
@@ -2713,6 +4233,25 @@
         layoutPanels();
       }
       btnDriveMode.addEventListener('click', () => setDriveMode(!driveMode));
+      // Sürüşte yalnızca gerekli düğmeler kalsın: model araçları gizlenir
+      ['btn-autorotate', 'btn-topdeck', 'btn-explode', 'btn-drive', 'btn-workshop', 'btn-assembly', 'btn-library', 'btn-gallery', 'btn-parts']
+        .forEach((id) => { const el = document.getElementById(id); if (el) el.classList.add('model-only'); });
+      document.querySelectorAll('footer [aria-label="Kamera Açıları"], footer .w-px').forEach((el) => el.classList.add('model-only'));
+      const sw = document.getElementById('sensor-widget');
+      sw.addEventListener('click', () => {
+        const det = document.getElementById('sw-detail');
+        const open = det.classList.toggle('hidden') === false;
+        det.classList.toggle('flex', open);
+        sw.setAttribute('aria-expanded', open ? 'true' : 'false');
+        document.getElementById('sw-arrow').textContent = open ? '▴' : '▾';
+      });
+      const hudMore = document.getElementById('hud-more');
+      hudMore.addEventListener('click', () => {
+        const open = driveHud.classList.toggle('collapsed') === false;
+        hudMore.setAttribute('aria-expanded', open ? 'true' : 'false');
+        hudMore.lastChild.textContent = open ? ' ▴' : ' ▾';
+        layoutPanels();
+      });
 
       const KEYMAP = { KeyW: 'f', ArrowUp: 'f', KeyS: 'b', ArrowDown: 'b', KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r' };
       window.addEventListener('keydown', (e) => {
@@ -2757,8 +4296,10 @@
       function castFrom(origin, dir) {
         sonarRay.set(origin, dir);
         sonarRay.far = 400;
-        const h = sonarRay.intersectObjects(obstacleMeshes, false);
-        return h.length ? h[0].distance : Infinity;
+        const h = obstacleMeshes.length ? sonarRay.intersectObjects(obstacleMeshes, false) : [];
+        const d = h.length ? h[0].distance : Infinity;
+        if (cityMode()) return Math.min(d, cityCast(city, origin.x, origin.z, dir.x, dir.z, 400));
+        return d;
       }
       function measureSonars() {
         sonarUnits.forEach((u) => {
@@ -2785,6 +4326,7 @@
       [-9, -4.5, 0, 4.5, 9].forEach((x) => { FOOT.push([x, 11.6], [x, -11.3]); });
       [-5.8, 0, 5.8].forEach((z) => { FOOT.push([9, z], [-9, z]); });
       function blockedPose(x, z, h) {
+        if (cityMode() && cityBlocked(city, x, z, h)) return true;
         const c = Math.cos(h);
         const sn = Math.sin(h);
         for (const [lx, lz] of FOOT) {
@@ -2814,6 +4356,7 @@
         if (text === lastParkText) return;
         lastParkText = text;
         parkStatus.textContent = text;
+        parkStatus.title = text;
         parkStatus.classList.toggle('hidden', !text);
         layoutPanels();
       }
@@ -2821,6 +4364,7 @@
         const n = log ? log.length : 0;
         if (n === lastLogLen) return;
         lastLogLen = n;
+        document.getElementById('log-count').textContent = n ? '(' + n + ')' : '';
         parkLog.classList.toggle('hidden', !n);
         parkLog.innerHTML = (log || []).slice(-5).map((l) =>
           '<div class="flex gap-1.5 items-baseline"><span class="font-bold ' + (l.ok ? 'text-emerald-600' : 'text-slate-400') + '">' + (l.ok ? '✓' : '✕') + '</span>' +
@@ -2836,6 +4380,7 @@
       }
       function stopPark(msg) {
         park = null;
+        cityBot = null;
         btnAutoPark.classList.remove('ring-2', 'ring-amber-400');
         btnAutoPark.textContent = 'Otomatik Park Et';
         hudMode.textContent = autoMode ? 'Otonom' : 'Manuel';
@@ -2857,12 +4402,15 @@
         });
         parkControls.classList.toggle('hidden', k !== 'park');
         if (autoMode) setAuto(false);
-        const s = k === 'park' ? PARK_START : { x: 0, z: 0, h: 0 };
+        const s = k === 'park' ? (cityMode() ? city.start : PARK_START) : { x: 0, z: 0, h: 0 };
         placeRobot(s.x, s.z, s.h);
+        controls.maxDistance = cityMode() ? 1100 : 180;
+        document.getElementById('city-controls').classList.toggle('hidden', !cityMode());
+        btnObstacle.classList.toggle('hidden', cityMode());
         camFollow = true;
         chaseView();
         renderParkLog(null);
-        showParkStatus(k === 'park' ? 'Robot otoparkın düzenini bilmiyor; ölçer ve kendisi karar verir. Kurallar: kaldırımda boşluk ≥ ' + RULES.parMinLen + ' cm → paralel · park yeri ≥ ' + RULES.duzMinWidth + ' cm → düz · ' + RULES.perpMinWidth + '–' + RULES.duzMinWidth + ' cm → geri.' : '');
+        showParkStatus(k === 'park' ? 'Robot otoparkın düzenini bilmiyor; bulunduğu yerden arar, ölçer ve kendisi karar verir. Kurallar: kaldırımda boşluk ≥ ' + RULES.parMinLen + ' cm → paralel · park yeri ≥ ' + RULES.duzMinWidth + ' cm → düz · ' + RULES.perpMinWidth + '–' + RULES.duzMinWidth + ' cm → geri.' : '');
       }
       layoutBtns.forEach((b) => b.addEventListener('click', () => {
         if (b.dataset.map && b.dataset.map !== currentMap) {
@@ -2870,6 +4418,7 @@
           buildLot(lotSeed, currentMap);
         }
         setLayout(b.dataset.layout);
+        if (b.dataset.map === 'sehir') showParkStatus('Şehir: ' + city.roads.length + ' yol, ışıklı kavşaklar, yaya geçitleri, hastane ve belediye otoparkları. Hedefi seçip "Otomatik Park Et"e basın; robot trafiğe uyarak gider.');
         if (b.dataset.map === 'cadde') showParkStatus('Cadde: robot sağdaki kaldırımda paralel, soldaki dükkân önü ceplerde dikey park yeri arar. Yaya geçitlerine park etmez. "Otomatik Park Et"e basın.');
       }));
 
@@ -2878,8 +4427,27 @@
         if (currentLayout !== 'park') setLayout('park');
         if (autoMode) setAuto(false);
         Object.keys(keys).forEach((k) => { keys[k] = false; });
-        placeRobot(PARK_START.x, PARK_START.z, PARK_START.h);
-        park = { steps: parkPlanAuto(currentLot ? currentLot.scanEnd : undefined), i: 0, mem: {}, dec: null };
+        if (cityMode()) {
+          const sel = document.getElementById('city-target').value;
+          cityBot = makeCityRobot(city, sel === 'curb' ? 'curb' : +sel);
+          const P0 = { x: robotGroup.position.x, z: robotGroup.position.z, h: drive.heading };
+          drive.v = 0; drive.w = 0;
+          if (!cityRobotStart(cityBot, P0)) { const e = cityBot.error; cityBot = null; showParkStatus(e + '.'); return; }
+          park = { city: true, dec: null };
+          lastLogLen = -1;
+          renderParkLog([]);
+          btnAutoPark.classList.add('ring-2', 'ring-amber-400');
+          btnAutoPark.textContent = 'Durdur';
+          hudMode.textContent = 'Otonom şehir sürüşü';
+          camFollow = true;
+          chaseView();
+          return;
+        }
+        // Robot bulunduğu yerden başlar: park yerindeyse önce çıkar, koridora hizalanır, oradan ileriye doğru arar
+        const P0 = { x: robotGroup.position.x, z: robotGroup.position.z, h: drive.heading };
+        drive.v = 0;
+        drive.w = 0;
+        park = { steps: parkPlanAuto(currentLot ? currentLot.scanEnd : undefined, P0), i: 0, mem: {}, dec: null };
         lastLogLen = -1;
         renderParkLog([]);
         btnAutoPark.classList.add('ring-2', 'ring-amber-400');
@@ -2896,9 +4464,13 @@
         lotSeed = (lotSeed * 16807 + 12345) % 2147483647;
         buildLot(lotSeed);
         setLayout('park');
-        showParkStatus((currentMap === 'cadde' ? 'Yeni cadde hazır' : 'Yeni otopark hazır') + ': araçlar ve boşluklar rastgele dizildi. Robot bunları bilmiyor.');
+        showParkStatus(currentMap === 'sehir' ? 'Yeni şehir düzeni: park doluluğu, ara sokaklar, hastane ve belediye otoparklarının yeri değişti.' : (currentMap === 'cadde' ? 'Yeni cadde hazır' : 'Yeni otopark hazır') + ': araçlar ve boşluklar rastgele dizildi. Robot bunları bilmiyor.');
       });
       document.getElementById('btn-park-reset').addEventListener('click', () => setLayout('park'));
+      document.getElementById('btn-simspeed').addEventListener('click', (e) => {
+        simSpeed = simSpeed === 1 ? 2 : simSpeed === 2 ? 4 : 1;
+        e.currentTarget.textContent = 'Hız ' + simSpeed + '×';
+      });
 
       // Sınamak için robotun gidiş yönüne bir koli bırak / kaldır
       const btnObstacle = document.getElementById('btn-obstacle');
@@ -2947,7 +4519,38 @@
         else dropTestBox();
       });
 
+      function cityParkTick(dt) {
+        const P = { x: robotGroup.position.x, z: robotGroup.position.z, h: drive.heading };
+        const R = cityBot;
+        const hadDec = !!R.dec;
+        const [v, w] = cityRobotTick(R, P, dt, sonarByName);
+        if (Math.abs(v) > 0.5) lastParkV = v;
+        renderParkLog(R.mem && R.mem.log ? R.mem.log : []);
+        if (R.error) { stopPark(R.error + '.'); return [0, 0]; }
+        if (R.dec && !hadDec) {
+          // karar anında kamerayı park yerine çevir (yolun üstünden)
+          const F = R.frame;
+          const isPar = R.dec.type === 'paralel';
+          const look = frameToW(F, isPar ? -28 : 45, R.dec.c);
+          const pos = frameToW(F, isPar ? 30 : -18, R.dec.c - 72);
+          camFollow = false;
+          camTargetLook.set(look[0], 0, look[1]);
+          camTargetPos.set(pos[0], 95, pos[1]);
+          camAnimActive = true;
+        }
+        if (R.done) {
+          const kind = R.dec ? R.dec.type : 'paralel';
+          const where = R.lot ? R.lot.name : (R.lane ? R.lane.road.name : 'yol kenarı');
+          const f = Math.round(sonarByName('Ön')), r = Math.round(sonarByName('Arka'));
+          stopPark('✓ ' + where + ': ' + PARK_NAMES[kind] + ' tamamlandı (önde ' + f + ' cm, arkada ' + r + ' cm).');
+          return [0, 0];
+        }
+        hudMode.textContent = R.state === 'lane' || R.state === 'conn' ? 'Şehirde sürüş' : 'Otomatik park';
+        showParkStatus((R.dec ? 'Karar: ' + PARK_NAMES[R.dec.type] + ' · ' : '') + R.status);
+        return [v, w];
+      }
       function parkTick(dt) {
+        if (park.city) return cityParkTick(dt);
         const P = { x: robotGroup.position.x, z: robotGroup.position.z, h: drive.heading };
         let st = park.steps[park.i];
         const wasPaused = !!park.mem.pause;
@@ -2962,11 +4565,13 @@
             // Karar verildi: manevrayı ekle, kamerayı park yerine çevir
             park.dec = park.mem.decision;
             park.steps = park.steps.concat(maneuverSteps(park.dec));
-            const sx = park.dec.type === 'paralel' ? -26 : 45;
-            const sz = park.dec.type === 'paralel' ? park.dec.zStart - 22 : park.dec.c;
+            // Kamera her zaman yolun üstünden bakar (binaların içine girmez)
+            const isPar = park.dec.type === 'paralel';
+            const sx = isPar ? -28 : 45;
+            const sz = Number.isFinite(park.dec.c) ? park.dec.c : robotGroup.position.z;
             camFollow = false;
             camTargetLook.set(sx, 0, sz);
-            camTargetPos.set(sx - 75, 115, sz - 80);
+            camTargetPos.set(isPar ? 30 : -18, 95, sz - 72);
             camAnimActive = true;
           }
           park.i++;
@@ -2997,6 +4602,12 @@
       }
 
       function updateDrive(dt) {
+        if (cityMode()) {
+          cityRobotAgent(city, cityBot, { x: robotGroup.position.x, z: robotGroup.position.z, h: drive.heading }, drive.v);
+          if (!cityBot) city.robot.park = Math.abs(drive.v) < 1;
+          const ch = cityUpdate(city, dt);
+          if (ch) cityParkedChanged(ch);
+        }
         measureSonars();
         const parkCmd = park ? parkTick(dt) : null;
         let fwd = 0;
@@ -3110,6 +4721,16 @@
         if (hudTimer <= 0) {
           hudTimer = 0.1;
           hudSpeed.textContent = Math.round(Math.abs(drive.v)) + ' cm/s';
+          let near = sonarUnits[0];
+          sonarUnits.forEach((u) => { if (u.dist < near.dist) near = u; });
+          const nd = near.dist;
+          const swNear = document.getElementById('sw-near');
+          swNear.textContent = nd > 400 ? 'Engel yok' : HUD_SHORT[near.name] + ' ' + (nd < 10 ? nd.toFixed(1) : Math.round(nd)) + ' cm';
+          swNear.style.color = nd < ALARM_CM ? '#dc2626' : nd < 15 ? '#d97706' : '';
+          const dot = document.getElementById('sw-dot');
+          dot.classList.toggle('bg-emerald-500', nd >= 15);
+          dot.classList.toggle('bg-amber-500', nd < 15 && nd >= ALARM_CM);
+          dot.classList.toggle('bg-red-600', nd < ALARM_CM);
           sonarUnits.forEach((u, i) => {
             hudCells[i].textContent = u.dist > 400 ? '400+' : u.dist < 10 ? u.dist.toFixed(1) : Math.round(u.dist);
             hudCells[i].style.color = u.dist < ALARM_CM ? '#dc2626' : u.dist < 15 ? '#d97706' : '#0f172a';
@@ -3770,7 +5391,9 @@
         }
 
         if (driveMode) {
-          updateDrive(dt);
+          const nSub = cityMode() ? simSpeed : 1;
+          for (let k = 0; k < nSub; k++) updateDrive(dt);
+          if (cityMode()) syncCity(false);
         } else {
           sonarUnits.forEach((u) => u.cone.scale.set(1, 1, 1));
         }
@@ -3787,6 +5410,20 @@
         }
 
         asmUpdate(dt);
+
+        // Kamera güvenliği: bozuk (NaN) konumdan kurtar; caddede binaların içine girmesin
+        if (!Number.isFinite(camera.position.x + camera.position.y + camera.position.z) ||
+            !Number.isFinite(controls.target.x + controls.target.y + controls.target.z)) {
+          camAnimActive = false;
+          controls.target.set(robotGroup.position.x, 3.6, robotGroup.position.z);
+          camera.position.set(robotGroup.position.x - 20, 22, robotGroup.position.z - 30);
+        }
+        if (cityMode()) camera.position.y = Math.max(6, camera.position.y);
+        if (driveMode && currentLayout === 'park' && currentMap === 'cadde') {
+          camera.position.x = Math.max(-74, Math.min(92, camera.position.x));
+          camera.position.z = Math.min(STREET_END - 4, camera.position.z);
+          camera.position.y = Math.max(4, camera.position.y);
+        }
 
         // Gölge ışığı robotu takip eder
         keyLight.position.set(robotGroup.position.x - 16, 28, robotGroup.position.z + 18);
