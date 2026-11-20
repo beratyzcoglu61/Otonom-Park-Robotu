@@ -191,7 +191,7 @@
       <!-- Ayrıntılar (açılır) -->
       <div class="hud-detail flex flex-wrap items-center justify-center gap-3 mt-2 pt-2 border-t border-slate-200/70">
         <div id="park-log" class="hidden max-w-sm text-[11px] leading-snug bg-white/70 rounded-lg px-2.5 py-1.5 flex flex-col gap-0.5"></div>
-        <div class="text-[11px] text-slate-500 hidden sm:block kb-hint">Klavye: W A S D / oklar</div>
+        <div class="text-[11px] text-slate-500 hidden sm:block kb-hint">Klavye: W A S D / oklar · Gamepad: sol çubuk sür, sağ çubuk kamera, RB/LB uzaklaştır/yakınlaştır, A otomatik park, B durdur, Y kamera, ▲ ▼ hedef, ◀ ▶ harita</div>
       </div>
       <!-- Dokunmatik yön tuşları (yalnızca dokunmatik ekranda) -->
       <div id="dpad" class="grid grid-cols-3 gap-1 w-max mx-auto mt-2">
@@ -3786,7 +3786,7 @@
           specs: [['Motor kanalı', '4 DC (M1–M4)'], ['Akım', '0,6 A / kanal (1,2 A tepe)'], ['Motor beslemesi', '4,5–25 V'], ['Kullandığı pinler', 'D3–D8, D11, D12'], ['Motorlar', 'M1 sol ön, M2 sol arka, M3 sağ ön, M4 sağ arka']] },
         hcsr04: { cat: 'Sensör', name: 'HC-SR04 Ultrasonik Sensör', qty: 6, dot: '#1e4fd8',
           desc: "40 kHz ses darbesi gönderip yankının dönüş süresinden mesafeyi hesaplar. Altı sabit sensör robotun çevresini kollar: önde ve arkada birer, her yanda ikişer. Yan sensörler gövdenin ön ve arka uçlarına yakındır; böylece park yerinin başlangıcını ve sonunu erken görür. Yan yana sensörler birbirinin yankısını karıştırmasın diye sırayla okunur.",
-          specs: [['Konum', 'Ön 1 • Arka 1 • Sol 2 • Sağ 2 (uçlara yakın)'], ['Menzil', '2–400 cm'], ['Ölçüm açısı', '≈ 15°'], ['Besleme', '5 V'], ['Buzzer eşikleri', '15 / 10 / 5 cm'], ['S1 Ön', 'D22 / D23'], ['S2 Sol ön', 'D24 / D25'], ['S3 Sol arka', 'D26 / D27'], ['S4 Arka', 'D28 / D29'], ['S5 Sağ ön', 'D30 / D31'], ['S6 Sağ arka', 'D32 / D33']] },
+          specs: [['Konum', 'Ön 1 • Arka 1 • Sol 2 • Sağ 2 (uçlara yakın)'], ['Menzil', '2–400 cm'], ['Ölçüm açısı', '≈ 15°'], ['Besleme', '5 V'], ['Buzzer eşikleri', '10 cm başlar · ≤ 3 cm sürekli'], ['S1 Ön', 'D22 / D23'], ['S2 Sol ön', 'D24 / D25'], ['S3 Sol arka', 'D26 / D27'], ['S4 Arka', 'D28 / D29'], ['S5 Sağ ön', 'D30 / D31'], ['S6 Sağ arka', 'D32 / D33']] },
         bracket: { cat: 'Bağlantı', name: 'Sensör Braketi', qty: 6, dot: '#2a2d33',
           desc: "Her HC-SR04 sensörünü üst plakaya dik olarak sabitleyen L şeklinde siyah akrilik braket.",
           specs: [['Malzeme', 'Siyah akrilik'], ['Kalınlık', '3 mm']] },
@@ -3800,8 +3800,8 @@
           desc: "4 adet AA pilin tek sıra yan yana durduğu düz yuva; alt katın ortasında arka arkaya iki tane var. Yuvalar seri bağlı (8 × 1,5 V = 12 V) ve shield'in EXT_PWR girişine gider. TT motorlar 3–6 V için yapıldığından kodda motor hızı (PWM) yaklaşık %60 ile sınırlı.",
           specs: [['Pil', '8 × AA (1,5 V)'], ['Toplam', '12 V (seri)'], ['Giriş', 'Shield EXT_PWR']] },
         buzzer: { cat: 'Ses', name: 'Aktif Buzzer', qty: 1, dot: '#0b0b0c',
-          desc: "İki bacaklı aktif buzzer: kendi osilatörü olduğu için + bacağına HIGH verilince öter, ton üretmek gerekmez. Park sensörü gibi çalışır: engel 15 cm'ye gelince kesik kesik başlar, yaklaştıkça sıklaşır, 5 cm'nin altında sürekli öter.",
-          specs: [['Besleme', '3,3–5 V'], ['Bacaklar', '+ (uzun) → D34, − → GND'], ['15 cm', '≈ 1,4 bip/sn'], ['10 cm', '≈ 2,4 bip/sn'], ['< 5 cm', 'Sürekli']] },
+          desc: "İki bacaklı aktif buzzer: kendi osilatörü olduğu için + bacağına HIGH verilince öter, ton üretmek gerekmez. Park sensörü gibi çalışır: engel 10 cm'ye gelince kesik kesik başlar, yaklaştıkça sıklaşır, 3 cm ve altında sürekli öter.",
+          specs: [['Besleme', '3,3–5 V'], ['Bacaklar', '+ (uzun) → D34, − → GND'], ['10 cm', '≈ 1,4 bip/sn'], ['6 cm', '≈ 3 bip/sn'], ['≤ 3 cm', 'Sürekli']] },
         chassisTop: { cat: 'Şasi', name: 'Üst Şeffaf Akrilik Plaka', qty: 1, dot: '#bae6fd',
           desc: "Arduino Mega, motor shield, altı sensör ve buzzer'ın oturduğu şeffaf üst kat. Alttaki kabloların görülmesini kolaylaştırır.",
           specs: [['Malzeme', 'Şeffaf akrilik'], ['Kalınlık', '3 mm'], ['Boyut', '≈ 136 × 204 mm']] },
@@ -4115,7 +4115,8 @@
       let hudTimer = 0;
 
       // Buzzer sesi (Web Audio): aktif buzzer gibi sabit ≈2,3 kHz ton
-      const ALARM_CM = 5;
+      const ALARM_CM = 3;   // bu mesafe ve altı: sürekli öter
+      const BEEP_START_CM = 10;   // bu mesafeden itibaren kesik kesik başlar
       let audioCtx = null;
       let buzzGain = null;
       let soundOn = true;
@@ -4138,12 +4139,12 @@
           if (audioCtx.state === 'suspended') audioCtx.resume();
         } catch (err) { audioCtx = null; }
       }
-      // Park sensörü gibi: ≤15 cm aralıklı, ≤10 cm sık, <5 cm sürekli
+      // Park sensörü gibi: ≤10 cm aralıklı başlar, yaklaştıkça sıklaşır, ≤3 cm sürekli
       const BEEP_LEVELS = [
         null,
-        { text: "Bip… engel 15 cm'den yakın", cls: 'bg-amber-500' },
-        { text: "Bipler hızlanıyor: engel 10 cm'den yakın", cls: 'bg-orange-600' },
-        { text: "Sürekli ötüyor: engel 5 cm'den yakın!", cls: 'bg-red-600' }
+        { text: "Bip… engel 10 cm'den yakın", cls: 'bg-amber-500' },
+        { text: "Bipler hızlanıyor: engel 6 cm'den yakın", cls: 'bg-orange-600' },
+        { text: "Sürekli ötüyor: engel 3 cm veya daha yakın!", cls: 'bg-red-600' }
       ];
       let beepLevel = 0;
       let beepPhase = 0;
@@ -4601,6 +4602,93 @@
         return [v, w];
       }
 
+      // ---- GAMEPAD (Xbox / PlayStation / genel USB-Bluetooth kollar)
+      //  Sol çubuk veya RT/LT: ileri-geri, sol çubuk yatay: dönüş · Sağ çubuk: kamera (R3: kamerayı arkaya al)
+      //  A/✕: Otomatik Park · B/○: Durdur · X/□: Engel Koy · Y/△: Kamera
+      //  RB: kamerayı uzaklaştır · LB: yakınlaştır · Yön tuşları ▲ ▼: şehir hedefi · ◀ ▶: harita · Select: Yeni Düzen · Start: Başa Dön
+      const pad = { fwd: 0, turn: 0, active: false, prev: [], lastLevel: 0 };
+      window.addEventListener('gamepadconnected', (e) => toast('🎮 Gamepad bağlandı: ' + (e.gamepad.id || '').split('(')[0].trim() + '. Sürüş modunda sol çubukla sürün, A ile otomatik park.'));
+      window.addEventListener('gamepaddisconnected', () => { pad.active = false; pad.fwd = pad.turn = 0; toast('Gamepad çıkarıldı.'); });
+      const dz = (v) => (Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85);
+      const padSph = new THREE.Spherical();
+      let padDt = 1 / 60;
+      function pollGamepad(dt) {
+        padDt = dt || 1 / 60;
+        const list = navigator.getGamepads ? navigator.getGamepads() : [];
+        let g = null;
+        for (const q of list) if (q && q.connected) { g = q; break; }
+        if (!g) { pad.active = false; pad.fwd = pad.turn = 0; return; }
+        pad.active = true;
+        const btn = (i) => !!(g.buttons[i] && g.buttons[i].pressed);
+        const val = (i) => (g.buttons[i] ? g.buttons[i].value : 0);
+        const ax = (i) => dz(g.axes[i] || 0);
+        let f = -ax(1) + val(7) - val(6);
+        const t = -ax(0);
+        pad.camX = ax(2);
+        pad.camY = ax(3);
+        pad.fwd = Math.max(-1, Math.min(1, f));
+        pad.turn = Math.max(-1, Math.min(1, t));
+        const pressed = (i) => btn(i) && !pad.prev[i];
+        const click = (id) => { const el = document.getElementById(id); if (el && !el.closest('.hidden')) el.click(); };
+        if (driveMode) {
+          // çubuk oynatılınca otomatik sürüş bırakılır (klavyedeki gibi)
+          if ((Math.abs(pad.fwd) > 0.3 || Math.abs(pad.turn) > 0.3) && (park || autoMode)) {
+            if (autoMode) setAuto(false);
+            if (park) stopPark('Manuel kontrole geçildi (gamepad).');
+            if (!camFollow) { camFollow = true; chaseView(); }
+          }
+          if (pressed(0)) { if (currentLayout === 'park') btnAutoPark.click(); }
+          if (pressed(1)) { if (park) stopPark('Park durduruldu.'); if (autoMode) setAuto(false); }
+          if (pressed(2)) click('btn-obstacle');
+          if (pressed(3)) { if (!camFollow) { camFollow = true; chaseView(); } else { camFollow = false; camTargetLook.set(robotGroup.position.x, 0, robotGroup.position.z); camTargetPos.set(robotGroup.position.x + 1, cityMode() ? 420 : 160, robotGroup.position.z - 60); camAnimActive = true; } }
+          if (pressed(12) || pressed(13)) {
+            const sel = document.getElementById('city-target');
+            if (cityMode()) { sel.selectedIndex = (sel.selectedIndex + (pressed(13) ? 1 : sel.options.length - 1)) % sel.options.length; toast('Hedef: ' + sel.options[sel.selectedIndex].text); }
+          }
+          if (pressed(14) || pressed(15)) {
+            const order = ['otopark', 'cadde', 'sehir'];
+            const k = currentLayout === 'park' ? order.indexOf(currentMap) : -1;
+            const nx = order[(k + (pressed(15) ? 1 : order.length - 1) + order.length) % order.length];
+            const b = document.querySelector('.layout-btn[data-map="' + nx + '"]');
+            if (b) b.click();
+          }
+          if (pressed(11)) { camFollow = true; chaseView(); }
+          if (pressed(8)) click('btn-newlot');
+          if (pressed(9)) click('btn-park-reset');
+        }
+        pad.prev = g.buttons.map((b) => b.pressed);
+        // Sağ çubuk: kamerayı robotun etrafında döndür (yatay) ve yukarı-aşağı eğ (dikey)
+        // RB uzaklaştır, LB yakınlaştır (basılı tuttukça)
+        const zoom = (btn(5) ? 1 : 0) - (btn(4) ? 1 : 0);
+        if (zoom) {
+          camAnimActive = false;
+          const off = camera.position.clone().sub(controls.target);
+          const len0 = Math.hypot(off.x, off.y, off.z) || 1;
+          const dist = Math.max(controls.minDistance, Math.min(controls.maxDistance, len0 * Math.exp(zoom * 1.4 * padDt)));
+          off.multiplyScalar(dist / len0);
+          camera.position.copy(controls.target).add(off);
+        }
+        if (pad.camX || pad.camY) {
+          camAnimActive = false;
+          const off = camera.position.clone().sub(controls.target);
+          padSph.setFromVector3(off);
+          padSph.theta -= pad.camX * 2.2 * padDt;
+          padSph.phi = Math.max(0.15, Math.min(1.45, padSph.phi + pad.camY * 1.6 * padDt));
+          off.setFromSpherical(padSph);
+          camera.position.copy(controls.target).add(off);
+        }
+        // Buzzer sürekli öterken kol titrer
+        const lvl = beepLevelNow();
+        if (lvl === 3 && pad.lastLevel !== 3 && g.vibrationActuator && g.vibrationActuator.playEffect) {
+          g.vibrationActuator.playEffect('dual-rumble', { duration: 250, strongMagnitude: 0.6, weakMagnitude: 0.4 }).catch(() => {});
+        }
+        pad.lastLevel = lvl;
+      }
+      function beepLevelNow() {
+        const m = Math.min(...sonarUnits.map((u) => u.dist));
+        return m <= ALARM_CM ? 3 : m <= 6 ? 2 : m <= BEEP_START_CM ? 1 : 0;
+      }
+
       function updateDrive(dt) {
         if (cityMode()) {
           cityRobotAgent(city, cityBot, { x: robotGroup.position.x, z: robotGroup.position.z, h: drive.heading }, drive.v);
@@ -4643,6 +4731,7 @@
         } else {
           fwd = (keys.f ? 1 : 0) - (keys.b ? 1 : 0);
           turn = (keys.l ? 1 : 0) - (keys.r ? 1 : 0);
+          if (pad.active && (pad.fwd || pad.turn)) { fwd = pad.fwd; turn = pad.turn; }
         }
 
         const MAXV = 42;
@@ -4692,18 +4781,18 @@
           w.userData.spinGroup.rotation.x += (lin / 3.25) * dt;
         });
 
-        // Buzzer: ≤15 cm aralıklı, ≤10 cm sık, <5 cm sürekli
+        // Buzzer: ≤10 cm aralıklı başlar, yaklaştıkça hızlanır, ≤3 cm sürekli
         const minD = Math.min(...sonarUnits.map((u) => u.dist));
-        const level = minD < ALARM_CM ? 3 : minD <= 10 ? 2 : minD <= 15 ? 1 : 0;
+        const level = minD <= ALARM_CM ? 3 : minD <= 6 ? 2 : minD <= BEEP_START_CM ? 1 : 0;
         setBeepLevel(level);
-        // 15 cm'de saniyede ≈1,4 bip; 5 cm'ye yaklaştıkça sürekli hızlanır (≈8 bip/sn)
+        // 10 cm'de saniyede ≈1,4 bip; 3 cm'ye yaklaştıkça sürekli hızlanır (≈10 bip/sn)
         let beepOn = false;
         if (level === 3) {
           beepOn = true;
           beepPhase = 0;
         } else if (level > 0) {
-          const k = Math.max(0, Math.min(1, (minD - ALARM_CM) / 10)); // 0: 5 cm, 1: 15 cm
-          const period = 0.12 + k * 0.58;
+          const k = Math.max(0, Math.min(1, (minD - ALARM_CM) / (BEEP_START_CM - ALARM_CM))); // 0: 3 cm, 1: 10 cm
+          const period = 0.1 + k * 0.6;
           beepPhase = (beepPhase + dt / period) % 1;
           beepOn = beepPhase < 0.4;
         } else {
@@ -4726,14 +4815,14 @@
           const nd = near.dist;
           const swNear = document.getElementById('sw-near');
           swNear.textContent = nd > 400 ? 'Engel yok' : HUD_SHORT[near.name] + ' ' + (nd < 10 ? nd.toFixed(1) : Math.round(nd)) + ' cm';
-          swNear.style.color = nd < ALARM_CM ? '#dc2626' : nd < 15 ? '#d97706' : '';
+          swNear.style.color = nd <= ALARM_CM ? '#dc2626' : nd <= BEEP_START_CM ? '#d97706' : '';
           const dot = document.getElementById('sw-dot');
           dot.classList.toggle('bg-emerald-500', nd >= 15);
-          dot.classList.toggle('bg-amber-500', nd < 15 && nd >= ALARM_CM);
-          dot.classList.toggle('bg-red-600', nd < ALARM_CM);
+          dot.classList.toggle('bg-amber-500', nd <= BEEP_START_CM && nd > ALARM_CM);
+          dot.classList.toggle('bg-red-600', nd <= ALARM_CM);
           sonarUnits.forEach((u, i) => {
             hudCells[i].textContent = u.dist > 400 ? '400+' : u.dist < 10 ? u.dist.toFixed(1) : Math.round(u.dist);
-            hudCells[i].style.color = u.dist < ALARM_CM ? '#dc2626' : u.dist < 15 ? '#d97706' : '#0f172a';
+            hudCells[i].style.color = u.dist <= ALARM_CM ? '#dc2626' : u.dist <= BEEP_START_CM ? '#d97706' : '#0f172a';
           });
         }
       }
@@ -5391,6 +5480,7 @@
         }
 
         if (driveMode) {
+          pollGamepad(dt);
           const nSub = cityMode() ? simSpeed : 1;
           for (let k = 0; k < nSub; k++) updateDrive(dt);
           if (cityMode()) syncCity(false);
