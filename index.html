@@ -1619,6 +1619,9 @@
       const PARK_SERIT_EN = 28;      // paralel park şeridinin eni: kaldırımdan çizgiye (ÖLÇ)
       const CIZGI_ICERI_CM = 5;      // paralel parkta gövde çizgiden bu kadar içeride kalır
       const ROBOT_EN = 18;           // tekerlek dışından dışa
+      const KALDIRIM_MIN_CM = 7;     // paralel parkta gövde kaldırıma en fazla bu kadar yaklaşır
+      // Tek manevrada park: yerinde dönüşün sığacağı ve kaldırıma ≥ 8 cm kalacağı nokta (ortadan kaldırıma)
+      const PAR_CURB_X = Math.max(PIVOT_R + 2.6, ROBOT_EN / 2 + KALDIRIM_MIN_CM);
       const SIDE_SX = 6.1;           // yan sensörün araç ortasına yanal uzaklığı
       // Karar kuralları (gerçek araçta da aynı eşikler kullanılabilir)
       const RULES = {
@@ -1796,13 +1799,12 @@
           ];
         }
         // Paralel park (raporundaki yöntem): boşluğun ortasında yerinde 90° kaldırıma dön, boşluğa gir,
-        // yerinde 90° dönüp kaldırıma paralel ol, ön ve arka sensörle ortalan
+        // yerinde 90° dönüp kaldırıma paralel ol, ön ve arka sensörle ortalan (tek manevra, kaldırıma ≥ 8 cm)
         return [
           { type: 'lineTo', z: dec.c, speed: 14, label: 'Boşluğun ortasına gelindi' },
           { type: 'turn', h: -Math.PI / 2, label: 'Yerinde 90° kaldırıma doğru dönülüyor' },
           { type: 'exitX', x: dec.targetX, inc: false, label: 'Boşluğa giriliyor' },
           { type: 'turn', h: 0, label: 'Yerinde 90° dönüp kaldırıma paralel olunuyor' },
-          { type: 'shift', mode: 'curb', h0: 0, label: 'Çizgiden ' + CIZGI_ICERI_CM + ' cm içeri yanaşılıyor' },
           { type: 'center', h: 0, label: 'Önde ve arkada eşit boşluk bırakılıyor' },
           { type: 'turn', h: 0, label: 'Son hizalama' }
         ];
@@ -1972,7 +1974,7 @@
             // Şehir: boşluk yeterince uzadıysa sonunu beklemeden karar ver (ilk uygun yere park)
             if (st.early && B.ph === 'open' && openR && zR - B.g0 >= st.early && B.maxO <= 60 && B.lastCarX !== undefined) {
               const curbX = Math.max(B.curbX, B.lastCarX - 30);
-              const targetX = curbX + PIVOT_R + 2.6;
+              const targetX = curbX + PAR_CURB_X;
               if (targetX <= Math.max(B.lastCarX, -20) - 9 + 3) {
                 log('Sağ', 'Kaldırımda ' + Math.round(zR - B.g0) + ' cm boşluk (≥ ' + st.early + ' cm) → PARALEL PARK', true);
                 mem.decision = { type: 'paralel', len: zR - B.g0, c: B.g0 + st.early / 2 + 1, targetX, early: true };
@@ -1991,7 +1993,7 @@
                 // park etmiş araçların hizasından 3 cm'den fazla dışarı taşacaksa şerit dar demektir
                 const carSideX = P.x - 6.1 - sR;
                 const curbX = B.curbX !== undefined ? B.curbX : carSideX - 22;
-                const targetX = curbX + PIVOT_R + 2.6;
+                const targetX = curbX + PAR_CURB_X;
                 if (targetX > carSideX - 9 + 3) log('Sağ', 'Boşluk ' + Math.round(len) + ' cm ama şerit dar → geç', false);
                 else {
                   log('Sağ', 'Boşluk ' + Math.round(len) + ' cm (≥ ' + RULES.parMinLen + ' cm) → PARALEL PARK', true);
@@ -4628,7 +4630,7 @@
           const cm = (v) => String(Math.round(v * 10) / 10).replace('.', ',') + ' cm';
           const lx = frameToL(R.frame, robotGroup.position.x, robotGroup.position.z)[0];
           const sl = Math.min(sonarByName('Sol ön'), sonarByName('Sol arka'));
-          const det = kind === 'paralel' ? 'önde ' + cm(sonarByName('Ön')) + ' / arkada ' + cm(sonarByName('Arka')) + ', gövde çizginin ' + cm(-16 - (lx + 9)) + ' içinde' : (kind === 'duz' ? 'duvara ' + f + ' cm' : 'duvara ' + r + ' cm') + (sl < 46 && sr < 46 ? ', solda ' + cm(sl) + ' / sağda ' + cm(sr) : '');
+          const det = kind === 'paralel' ? 'önde ' + cm(sonarByName('Ön')) + ' / arkada ' + cm(sonarByName('Arka')) + ', kaldırıma ' + cm(lx - 9 + 44) + ', tek manevrada' : (kind === 'duz' ? 'duvara ' + f + ' cm' : 'duvara ' + r + ' cm') + (sl < 46 && sr < 46 ? ', solda ' + cm(sl) + ' / sağda ' + cm(sr) : '');
           stopPark('✓ ' + where + ': ' + PARK_NAMES[kind] + ' tamamlandı (' + det + ').');
           return [0, 0];
         }
@@ -4671,7 +4673,7 @@
             const sl = Math.round(Math.min(sonarByName('Sol ön'), sonarByName('Sol arka')) * 10) / 10;
             const cm = (v) => String(Math.round(v * 10) / 10).replace('.', ',') + ' cm';
             const sides = sl < 46 && sr < 46 ? ', solda ' + cm(sl) + ' / sağda ' + cm(sr) : '';
-            const detail = kind === 'duz' ? 'öndeki duvara ' + f + ' cm' + sides : kind === 'geri' ? 'arkadaki duvara ' + r + ' cm' + sides : 'önde ' + cm(sonarByName('Ön')) + ' / arkada ' + cm(sonarByName('Arka')) + ', gövde çizginin ' + lineGap + ' cm içinde';
+            const detail = kind === 'duz' ? 'öndeki duvara ' + f + ' cm' + sides : kind === 'geri' ? 'arkadaki duvara ' + r + ' cm' + sides : 'önde ' + cm(sonarByName('Ön')) + ' / arkada ' + cm(sonarByName('Arka')) + ', kaldırıma ' + cm(robotGroup.position.x - 9 + 44) + ', tek manevrada';
             stopPark('✓ Robotun kararı: ' + PARK_NAMES[kind] + ' — tamamlandı, ' + detail + '.');
             return [0, 0];
           }
